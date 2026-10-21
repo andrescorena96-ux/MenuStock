@@ -536,7 +536,7 @@ select.inp:focus {
     -webkit-backdrop-filter: blur(5px);
 
     z-index: 1000;
-    height: 70em;
+    height: 100%;
 }
 
 /* Contenedor exterior del modal — tamaño y posición tal cual */
@@ -1428,9 +1428,12 @@ li:focus-visible {
         padding: 1.3rem 0.9rem;
     }
 
-    .restockModalContainer {
-        height: 88vh;
-        max-height: 88vh;
+    /* El selector base usa id + clase y lleva !important, así que
+       este bloque no aplicaba nada. Hay que repetir el selector
+       completo para que la regla móvil sí tenga efecto. */
+    #modali-content .restockModalContainer {
+        height: 88vh !important;
+        max-height: 88vh !important;
     }
 
     .restockItem {

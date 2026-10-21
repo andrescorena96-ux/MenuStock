@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>MenúStock — pruebas</title>
+    <link rel="stylesheet" href="../home.css">
+</head>
+<body>
+<pre id="out">ejecutando...</pre>
+
+<script type="module">
+/**
+ * Prueba end-to-end de MenúStock.
+ *
+ * Monta la app real (index.html + home.js) en esta página y maneja la
+ * interfaz como lo haría una persona: hacer clic, escribir en los
+ * campos, elegir opciones. Al final deja el resultado en #out para que
+ * el runner (tests/run.js) lo lea del DOM.
+ *
+ * Se ejecuta abriendo tests/e2e.html en un navegador headless.
+ */
+
+const out = document.getElementById("out");   // se conserva aunque se reemplace body
+const log = [];
+
+function ok(name, condition, extra = "") {
+    log.push(`${condition ? "OK   " : "FALLA"} ${name}${extra ? "  -> " + extra : ""}`);
+}
+
+function fail(name, error) {
+    log.push(`FALLA ${name}  -> ${error && error.message}`);
+    log.push(String(error && error.stack).split("\n").slice(0, 4).join("\n"));
+}
+
+// --- Los diálogos nativos bloquearían la prueba: los interceptamos ---
+const prompts = [];
+const alerts = [];
+
+window.prompt = (message, defaultValue = "") => {
+    return prompts.length > 0 ? prompts.shift() : defaultValue;
+};
+window.alert = (message) => { alerts.push(message); };
+window.confirm = () => true;
+
+function click(selector) {
+    const el = document.querySelector(selector);
+    if (!el) throw new Error(`No se encontro ${selector}`);
+    el.click();
+    return el;
+}
+
+function setValue(selector, value) {
+    const el = document.querySelector(selector);
+    if (!el) throw new Error(`No se encontro ${selector}`);
+    el.value = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return el;
+}
+
+function cardCount() {
+    return document.querySelectorAll(".productCard").length;
+}
+
+try {
+    // =========================================================
+    // Montar la app real
+    // =========================================================
+    localStorage.clear();
+    window.__XSS = false;
+
+    const html = await (await fetch("../index.html")).text();
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+
+    // Se quita el <script> del HTML original: aca lo importamos a mano
+    // para poder ejecutarlo DESPUES de montar el DOM.
+    parsed.querySelectorAll("script").forEach(s => s.remove());
+    document.body.innerHTML = parsed.body.innerHTML;
+
+    await import("../home.js");
+
+    ok("El modulo home.js carga sin errores", true);
+    ok("Los perfiles por defecto se pintan",
+        document.querySelectorAll(".profileCard").length === 2,
+        `${document.querySelectorAll(".profileCard").length} tarjetas`);
+    ok("La landing tapa la app al principio",
+        document.getElementById("welcomeSection").classList.contains("hidden") === false &&
+        document.getElementById("appRoot").classList.contains("hidden") === true);
+
+    // Desde la landing se entra a la app
+    click("#welcomeGetStartedBt");
+    ok("El boton Empezar entra a la app",
+        document.getElementById("appRoot").classList.contains("hidden") === false &&
+        document.getElementById("welcomeSection").classList.contains("hidden") === true);
+
+    // =========================================================
+    // Crear un perfil
+    // =========================================================
+    prompts.push("Mi Tienda", "1234");
+    click("#createProfileBt");
+    ok("Se abre el selector de tipo de negocio",
+        document.querySelector('[data-store-type="general"]') !== null);
+
+    click('[data-store-type="general"]');
+    click("#inventaryConfirmBt");
+
+    ok("El perfil se crea y se entra a la app",
+        document.getElementById("appRoot").classList.contains("hidden") === false);
+    ok("El boton de perfil muestra el nombre",
+        document.getElementById("profileButtonName").textContent.trim() === "Mi Tienda",
+        document.getElementById("profileButtonName").textContent);
+
+    // =========================================================
+    // Prueba de XSS: nombre con HTML malicioso
+    // =========================================================
+    const XSS_NAME = 'Gaseosa <img src=x onerror="window.__XSS=true">';
+
+    click("#addProduct");
+    setValue("#newName", XSS_NAME);
+    setValue("#nprice", "2500");
+    setValue("#nstock", "10");
+    click("#inventaryConfirmBt");
+
+    ok("El nombre malicioso NO se ejecuta (XSS)", window.__XSS === false);
+    ok("El nombre malicioso se escapa en el DOM",
+        document.querySelector(".productCard h3").textContent === XSS_NAME,
+        document.querySelector(".productCard h3").textContent);
+    ok("No se inyecta un <img> dentro del nombre",
+        document.querySelector(".productCard h3").querySelector("img") === null);
+    ok("El producto se guardo en la lista",
+        cardCount() === 1, `${cardCount()} tarjetas`);
+
+    // =========================================================
+    // Categorias
+    // =========================================================
+    prompts.push("Bebidas");
+    click("#newCategoryBt");
+    prompts.push("Snacks");
+    click("#newCategoryBt");
+
+    click("#categoriesBt");
+    const catCards = [...document.querySelectorAll(".categoryCard")];
+    const nombresCat = catCards.map(c => c.querySelector(".categoryName").textContent.trim());
+    ok("La vista de categorias lista Bebidas, Snacks y Sin categoria",
+        nombresCat.includes("Bebidas") && nombresCat.includes("Snacks") && nombresCat.includes("Sin categoría"),
+        nombresCat.join(" | "));
+
+    // =========================================================
+    // BUG: al confirmar, la vista de categoria se perdia
+    // =========================================================
+    const catButtons = [...document.querySelectorAll("[data-open-cat]")];
+    const bebidasBtn = catButtons.find(b => b.textContent.trim() === "Bebidas");
+    bebidasBtn.click();
+
+    ok("Al entrar a Bebidas la lista queda vacia",
+        cardCount() === 0, `${cardCount()} tarjetas`);
+
+    click("#addProduct");
+    setValue("#newName", "Pepsi");
+    setValue("#nprice", "1800");
+    setValue("#nstock", "5");
+
+    const presetCat = document.getElementById("ncategory").value;
+    ok("El producto nace dentro de la categoria actual",
+        presetCat !== "", `categoria = ${presetCat ? "Bebidas" : "(ninguna)"}`);
+
+    click("#inventaryConfirmBt");
+
+    ok("Tras confirmar se sigue dentro de la categoria (el filtro no se pierde)",
+        cardCount() === 1, `${cardCount()} tarjetas - si fuera 2+, el filtro se perdio`);
+    ok("El producto se guardo con el nombre correcto",
+        document.querySelector(".productCard h3").textContent === "Pepsi",
+        document.querySelector(".productCard h3").textContent);
+
+    // =========================================================
+    // Ordenamiento numerico (bug del .sort() sin comparador)
+    // =========================================================
+    click("#productsBt");   // salir de la categoria -> ver todos
+    for (const [name, price] of [["Barato", "9"], ["Caro", "1000"], ["Medio", "100"]]) {
+        click("#addProduct");
+        setValue("#newName", name);
+        setValue("#nprice", price);
+        setValue("#nstock", "1");
+        click("#inventaryConfirmBt");
+    }
+
+    const selector = document.getElementById("searchBy");
+    selector.value = "maxPrice";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    setValue("#invSearch", "1000");
+
+    const precios = [...document.querySelectorAll(".productCard .productInfo p:first-of-type")]
+        .map(p => Number(p.textContent.replace("$", "")));
+    const ordenCorrecto = precios.every((p, i) => i === 0 || precios[i - 1] <= p);
+
+    ok("El filtro por precio ordena numericamente", ordenCorrecto, `precios: ${precios.join(", ")}`);
+
+    // =========================================================
+    // Venta y historial
+    // =========================================================
+    click("#productsBt");
+    click(".productCard");
+    ok("La cuenta se abre al hacer clic en un producto",
+        document.getElementById("accumulatePanel").classList.contains("show"));
+    ok("El total de la cuenta se muestra",
+        document.getElementById("billTotal").textContent.startsWith("$"),
+        document.getElementById("billTotal").textContent);
+
+    click("#accumulateConfirmBt");
+
+    const usuarios = JSON.parse(localStorage.getItem("menuStockUsers"));
+    // El perfil creado por la prueba es el ULTIMO: Juan y Maria son los
+    // perfiles por defecto que nacen en la primera visita.
+    const miPerfil = usuarios.find(u => u.profile.name === "Mi Tienda");
+    const venta = miPerfil && miPerfil.historial[0];
+
+    ok("La venta queda registrada en el historial del perfil",
+        !!miPerfil && Array.isArray(miPerfil.historial) && miPerfil.historial.length === 1);
+    ok("El historial guarda renglones estructurados (no \"[object Object]\")",
+        !!venta &&
+        Array.isArray(venta.venta) &&
+        venta.venta.length === 1 &&
+        typeof venta.venta[0].nombre === "string" &&
+        typeof venta.venta[0].cantidad === "number",
+        venta ? JSON.stringify(venta.venta) : "sin venta");
+    ok("El historial guarda el total de la venta",
+        !!venta && typeof venta.total === "number" && venta.total > 0,
+        venta ? `total = ${venta.total}` : "sin venta");
+    ok("El stock se desconto tras la venta",
+        !!miPerfil && miPerfil.products.some(p => p.name.startsWith("Gaseosa") && p.quantity === 9),
+        miPerfil ? miPerfil.products.map(p => `${p.name}:${p.quantity}`).join(", ") : "");
+
+    // =========================================================
+    // El historial de stock registra los movimientos
+    // =========================================================
+    const movs = miPerfil ? miPerfil.stockHistory : [];
+    ok("El historial de stock registra los movimientos",
+        Array.isArray(movs) && movs.length > 0, `${movs.length} movimientos`);
+    ok("Los movimientos tienen accion y delta",
+        movs.every(m => m.action && typeof m.change === "number"),
+        movs.map(m => `${m.action}:${m.change}`).join(", "));
+
+    // =========================================================
+    // Migracion de claves antiguas
+    // Se importa el modulo con una query distinta para forzar una
+    // instancia nueva (la de arriba ya quedaria cacheada).
+    // =========================================================
+    localStorage.clear();
+    localStorage.setItem("inventoryUsers", JSON.stringify([{
+        id: "legacy-1",
+        profile: { name: "Negocio viejo" },
+        password: null,
+        storeType: "general",
+        products: [{ id: "p1", name: "Producto viejo", price: 100, quantity: 3, image: "" }],
+        restockPreferences: {},
+        historial: [],
+        stockHistory: [],
+        categories: []
+    }]));
+    localStorage.setItem("currentInventoryUser", "legacy-1");
+
+    try {
+        await import("../home.js?migracion=1");
+    } catch (e) {
+        // La instancia nueva puede chocar con el DOM ya montado: no importa,
+        // lo que se verifica es la migracion del almacenamiento.
+    }
+
+    const migrado = localStorage.getItem("menuStockUsers");
+    ok("Los datos de la version anterior se migran a menuStockUsers",
+        migrado !== null && JSON.parse(migrado)[0].profile.name === "Negocio viejo",
+        migrado ? "migrado" : "no migro");
+    ok("La clave vieja inventoryUsers se elimina",
+        localStorage.getItem("inventoryUsers") === null);
+    ok("El ultimo perfil usado se migra a menuStockCurrentUser",
+        localStorage.getItem("menuStockCurrentUser") === "legacy-1",
+        String(localStorage.getItem("menuStockCurrentUser")));
+
+} catch (error) {
+    fail("excepcion no controlada", error);
+}
+
+// El bloque de resultados se vuelve a pegar: body.innerHTML lo habia borrado.
+document.body.appendChild(out);
+out.textContent = log.join("\n");
+</script>
+</body>
+</html>

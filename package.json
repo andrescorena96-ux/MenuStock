@@ -1,0 +1,17 @@
+{
+  "name": "menustock",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App para vender y comprar productos: inventario, categorías, reposición e historial de stock.",
+  "scripts": {
+    "start": "node dev-server.js",
+    "test": "node tests/run.js"
+  },
+  "keywords": [
+    "inventario",
+    "pos",
+    "ventas",
+    "stock"
+  ],
+  "license": "MIT"
+}

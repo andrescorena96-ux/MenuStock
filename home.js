@@ -102,6 +102,42 @@ let bill = 0;
 let myList = [];
 let act = "bill";
 
+// Contador monótono para numerar los renglones de la cuenta.
+// Antes se usaba myList.length + 1, que repetía números cuando
+// se borraba un renglón del medio.
+let billOrderCounter = 0;
+
+
+/* ============================================================
+   1b. UTILIDADES DE TEXTO Y URL
+   Los nombres de productos, categorías y perfiles los escribe el
+   usuario. Si se inyectan con innerHTML sin escapar, un nombre como
+   `<img src=x onerror=...>` se ejecuta. Estos helpers neutralizan
+   el HTML antes de meterlo en el DOM.
+   ============================================================ */
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+// Solo se permiten URLs de imagen razonables. Bloquea javascript:,
+// data:text/html y cualquier esquema raro que pudiera ejecutarse.
+function safeImageUrl(url) {
+    const raw = String(url ?? "").trim();
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);/i.test(raw)) return raw;
+    return "";
+}
+
+// Imagen de relleno cuando el producto no tiene una válida.
+const PLACEHOLDER_IMAGE =
+    "https://i0.wp.com/tinasbotanicals.com/wp-content/uploads/2025/01/No-Product-Image-Available.png?fit=800%2C800&ssl=1";
+
 const USERS_KEY = "menuStockUsers";
 const CURRENT_USER_KEY = "menuStockCurrentUser";
 const WELCOME_SEEN_KEY = "menuStockWelcomeSeen";
@@ -534,13 +570,13 @@ function displayProfiles() {
 
         card.innerHTML = `
             <div class="profileAvatar">
-                ${firstLetter}
+                ${escapeHtml(firstLetter)}
             </div>
             <div class="profileInfo">
-                <h3>${user.profile.name}${lockIcon}</h3>
-                <span>${type.icon} ${type.label}</span>
+                <h3>${escapeHtml(user.profile.name)}${lockIcon}</h3>
+                <span>${type.icon} ${escapeHtml(type.label)}</span>
             </div>
-            <button class="profileSelect">
+            <button class="profileSelect" type="button">
                 Entrar
             </button>
         `;
@@ -567,10 +603,15 @@ function selectProfile(userId) {
     localStorage.setItem(CURRENT_USER_KEY, user.id);
     localStorage.removeItem(CURRENT_USER_KEY_LEGACY);
 
-    // Conectamos los datos del perfil
-    products = currentUser.products;
-    restockPreferences = currentUser.restockPreferences;
-    historial = currentUser.historial;
+    // Conectamos los datos del perfil.
+    // Los guards evitan que un perfil guardado por una versión
+    // anterior (sin alguno de estos campos) deje la variable en
+    // undefined y reviente la app al usarla.
+    products = Array.isArray(currentUser.products) ? currentUser.products : [];
+    restockPreferences = (currentUser.restockPreferences && typeof currentUser.restockPreferences === "object")
+        ? currentUser.restockPreferences
+        : {};
+    historial = Array.isArray(currentUser.historial) ? currentUser.historial : [];
 
     // COMPATIBILIDAD: perfiles creados antes de esta versión
     // no tienen historial de stock ni categorías.
@@ -602,7 +643,7 @@ function selectProfile(userId) {
         if (!("subcategory" in product)) product.subcategory = null;
     }
 
-    console.log("Perfil seleccionado:", currentUser.profile.name);
+    console.info("Perfil seleccionado:", currentUser.profile.name);
 
     hideProfiles();
 
@@ -935,14 +976,14 @@ function renderBreadcrumb() {
     `;
 
     if (currentSubcategoryId === null) {
-        html += `<span class="crumb current">${catName}</span>`;
+        html += `<span class="crumb current">${escapeHtml(catName)}</span>`;
         productsTitle.textContent = catName;
     } else {
         const subName = subcategoryName(currentCategoryId, currentSubcategoryId);
         html += `
-            <button class="crumb" data-crumb="category" type="button">${catName}</button>
+            <button class="crumb" data-crumb="category" type="button">${escapeHtml(catName)}</button>
             <span class="crumbSep">/</span>
-            <span class="crumb current">${subName}</span>
+            <span class="crumb current">${escapeHtml(subName)}</span>
         `;
         productsTitle.textContent = subName;
     }
@@ -974,7 +1015,7 @@ function renderCategories() {
 
         const subs = category.subcategories.map(sub => `
             <li class="subItem">
-                <button class="subName" data-open-sub="${sub.id}" type="button">${sub.name}</button>
+                <button class="subName" data-open-sub="${escapeHtml(sub.id)}" type="button">${escapeHtml(sub.name)}</button>
                 <span class="categoryCount">${countProductsIn(category.id, sub.id)}</span>
                 <button class="catBt" data-rename-sub="${sub.id}" type="button">Renombrar</button>
                 <button class="catBt danger" data-delete-sub="${sub.id}" type="button">Eliminar</button>
@@ -983,8 +1024,8 @@ function renderCategories() {
 
         card.innerHTML = `
             <div class="categoryCardHead">
-                <button class="categoryName" data-open-cat="${category.id}" type="button">
-                    ${category.name}
+                <button class="categoryName" data-open-cat="${escapeHtml(category.id)}" type="button">
+                    ${escapeHtml(category.name)}
                 </button>
                 <span class="categoryCount">${countProductsIn(category.id)} productos</span>
             </div>
@@ -1184,11 +1225,14 @@ function display(prods) {
         li.id = prod.id;
         li.dataset.id = prod.id;
 
+        // Imagen: solo se acepta una URL de imagen válida.
+        const imageUrl = safeImageUrl(prod.image) || PLACEHOLDER_IMAGE;
+
         // Etiqueta de categoría (solo si el producto tiene una)
         let catLine = "";
         if (prod.category) {
             const subName = prod.subcategory ? subcategoryName(prod.category, prod.subcategory) : "";
-            catLine = `<p class="productCat">${categoryName(prod.category)}${subName ? " › " + subName : ""}</p>`;
+            catLine = `<p class="productCat">${escapeHtml(categoryName(prod.category))}${subName ? " › " + escapeHtml(subName) : ""}</p>`;
         }
 
         // Resumen de tallas/colores (solo productos de ropa con variantes)
@@ -1196,21 +1240,27 @@ function display(prods) {
         if (Array.isArray(prod.variants) && prod.variants.length > 0) {
             const sizes = [...new Set(prod.variants.map(v => v.size))];
             const colors = [...new Set(prod.variants.map(v => v.color).filter(Boolean))];
-            const sizesText = `Tallas: ${sizes.join(", ")}`;
-            const colorsText = colors.length > 0 ? ` · Colores: ${colors.join(", ")}` : "";
+            const sizesText = `Tallas: ${sizes.map(escapeHtml).join(", ")}`;
+            const colorsText = colors.length > 0 ? ` · Colores: ${colors.map(escapeHtml).join(", ")}` : "";
             variantLine = `<p class="variantSummary">${sizesText}${colorsText}</p>`;
         }
 
         li.innerHTML = `
-            <img class = " pr" src="${prod.image}" alt="">
-            <div class = "productInfo">
-                <h3>${prod.name}</h3>
-                <p>$${prod.price}</p>
-                <p><strong>Stock:</strong> ${prod.quantity}</p>
+            <img class="pr" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(prod.name)}">
+            <div class="productInfo">
+                <h3>${escapeHtml(prod.name)}</h3>
+                <p>$${escapeHtml(prod.price)}</p>
+                <p><strong>Stock:</strong> ${escapeHtml(prod.quantity)}</p>
                 ${catLine}
                 ${variantLine}
             </div>
         `;
+
+        // La tarjeta se hace clicable con el ratón; con rol de botón
+        // y tabindex también se puede llegar con el teclado.
+        li.setAttribute("role", "button");
+        li.setAttribute("tabindex", "0");
+
         allProducts.appendChild(li);
     }
 }
@@ -1246,19 +1296,24 @@ function filterAn() {
             filteredProducts = base.filter(prod => prod.name.toLowerCase().includes(keywords));
             break;
         case "maxPrice":
-            filteredProducts = base.filter(prod => prod.price <= Number(text)).sort();
+            // .sort() sin comparador ordena como texto (100 antes que 20).
+            filteredProducts = base
+                .filter(prod => prod.price <= Number(text))
+                .sort((a, b) => a.price - b.price);
             break;
         case "minPrice":
             searchInp.type = "number";
             searchInp.placeholder = "Precio mínimo del producto...";
-            filteredProducts = base.filter(prod => prod.price >= Number(text));
+            filteredProducts = base
+                .filter(prod => prod.price >= Number(text))
+                .sort((a, b) => a.price - b.price);
             break;
         case "quantity":
             searchInp.type = "number";
             searchInp.placeholder = "Ingresa un apróximado ...";
             filteredProducts = base
                 .filter(prod => prod.quantity <= Number(text))
-                .sort();
+                .sort((a, b) => a.quantity - b.quantity);
             break;
     }
 
@@ -1285,11 +1340,18 @@ function updateBill() {
 }
 
 function addToHistorial() {
+    // Antes se guardaba `${myList}`, que produce "[object Object]".
+    // Ahora se guarda la lista real de renglones vendidos.
     historial.push({
-        "id": historial.length + 1,
-        "venta": `${myList}`,
-        "total": bill,
-        "fecha": new Date()
+        id: crypto.randomUUID(),
+        venta: myList.map(item => ({
+            id: item.id,
+            nombre: item.name,
+            precio: Number(item.price),
+            cantidad: item.quantity
+        })),
+        total: bill,
+        fecha: new Date().toISOString()
     });
 }
 
@@ -1299,12 +1361,9 @@ function addToHistorial() {
    ============================================================ */
 
 function closeModal() {
-    const modal = overlay.querySelector(".modal");
-    if (modal) {
-        modal.classList.remove("show");
-        modal.classList.add("closing");
-    }
     overlay.classList.add("hidden");
+    modali.classList.remove("show");
+    modali.classList.add("closing");
     act = "bill";
 }
 
@@ -1644,6 +1703,30 @@ function confirmButton() {
                 return;
             }
 
+            // Se valida el stock ANTES de descontar. Antes se modificaba
+            // primero y el aviso salía después, dejando el inventario
+            // en negativo sin remedio.
+            const shortages = [];
+            for (let consume of myList) {
+                const product = products.find(value => String(value.id) === String(consume.id));
+                if (!product) continue;
+
+                const missing = consume.quantity - product.quantity;
+                if (missing > 0) {
+                    shortages.push(
+                        `• ${product.name}: faltan ${missing} u. (stock actual: ${product.quantity})`
+                    );
+                }
+            }
+
+            if (shortages.length > 0) {
+                alert(
+                    "No hay stock suficiente para completar la venta:\n\n" +
+                    shortages.join("\n")
+                );
+                return;
+            }
+
             for (let consume of myList) {
                 const product = products.find(value => String(value.id) === String(consume.id));
 
@@ -1652,15 +1735,10 @@ function confirmButton() {
                     continue;
                 }
 
-                const left = product.quantity - consume.quantity;
                 product.quantity -= consume.quantity;
 
                 // La venta también es un movimiento de inventario
                 recordStockChange(product, "sale", -consume.quantity, `Venta · ${consume.quantity} u.`);
-
-                if (left < 0) {
-                    alert(`${product.name}: se vendieron ${-left} unidades de más.`);
-                }
             }
 
             // Guardar la venta ANTES de vaciar myList
@@ -1713,7 +1791,11 @@ function confirmButton() {
     }
 
     saveCurrentUser();
-    display(products);
+
+    // Antes se llamaba display(products), que pintaba TODOS los productos
+    // y borraba el filtro de categoría en el que estuviéramos.
+    // refreshProducts() respeta la categoría activa.
+    refreshProducts();
 }
 
 function cancelCurrentAction() {
@@ -1887,8 +1969,8 @@ function myInventaryActions(action) {
 
             const categoryOptions = [`<option value="">Sin categoría</option>`]
                 .concat(categories.map(cat => `
-                    <option value="${cat.id}" ${cat.id === presetCategory ? "selected" : ""}>
-                        ${cat.name}
+                    <option value="${escapeHtml(cat.id)}" ${cat.id === presetCategory ? "selected" : ""}>
+                        ${escapeHtml(cat.name)}
                     </option>
                 `))
                 .join("");
@@ -1959,8 +2041,8 @@ function myInventaryActions(action) {
                 subcategorySelect.disabled = false;
                 subcategorySelect.innerHTML = [`<option value="">Sin subcategoría</option>`]
                     .concat(category.subcategories.map(sub => `
-                        <option value="${sub.id}" ${sub.id === selectedSubId ? "selected" : ""}>
-                            ${sub.name}
+                        <option value="${escapeHtml(sub.id)}" ${sub.id === selectedSubId ? "selected" : ""}>
+                            ${escapeHtml(sub.name)}
                         </option>
                     `))
                     .join("");
@@ -1986,15 +2068,15 @@ function myInventaryActions(action) {
                 function sizeCheckboxesHtml() {
                     return sizeList.map(size => `
                         <label class="sizeCheckboxOption">
-                            <input type="checkbox" class="sizeCheck" value="${size}"> ${size}
+                            <input type="checkbox" class="sizeCheck" value="${escapeHtml(size)}"> ${escapeHtml(size)}
                         </label>
                     `).join("");
                 }
 
                 function qtyRowsHtml(sizes) {
                     return sizes.map(size => `
-                        <div class="sizeQtyRow" data-size="${size}">
-                            <span>${size}</span>
+                        <div class="sizeQtyRow" data-size="${escapeHtml(size)}">
+                            <span>${escapeHtml(size)}</span>
                             <input type="number" min="0" class="perSizeQty" placeholder="Cantidad">
                         </div>
                     `).join("");
@@ -2132,18 +2214,18 @@ function myInventaryActions(action) {
                 `).join("");
 
                 return `
-                <div class="restockItem" data-id="${prod.id}">
+                <div class="restockItem" data-id="${escapeHtml(prod.id)}">
                     <div class="restockInfo">
-                        <strong>${prod.name}</strong>
-                        <span>Stock actual: ${prod.quantity}</span>
+                        <strong>${escapeHtml(prod.name)}</strong>
+                        <span>Stock actual: ${escapeHtml(prod.quantity)}</span>
                     </div>
                     <div class="restockInputs">
-                        <select id="pack-${prod.id}">
+                        <select id="pack-${escapeHtml(prod.id)}">
                             ${packSelectOptions}
                         </select>
-                        <input id="inputRestock-${prod.id}" class="restockQty" type="text"
+                        <input id="inputRestock-${escapeHtml(prod.id)}" class="restockQty" type="text"
                                inputmode="text" placeholder="ej: 2 + 16" value="">
-                        <span class="restockPreview" id="preview-${prod.id}">= 0 u.</span>
+                        <span class="restockPreview" id="preview-${escapeHtml(prod.id)}">= 0 u.</span>
                     </div>
                 </div>
                 `;
@@ -2245,17 +2327,17 @@ function myInventaryActions(action) {
                 historyList.innerHTML = entries.map(entry => `
                     <div class="historyItem">
                         <div class="historyInfo">
-                            <strong>${entry.productName}</strong>
+                            <strong>${escapeHtml(entry.productName)}</strong>
                             <span>
-                                ${formatHistoryDate(entry.date)} ·
-                                ${ACTION_LABELS[entry.action] || entry.action}${entry.unit ? " · " + entry.unit : ""}
+                                ${escapeHtml(formatHistoryDate(entry.date))} ·
+                                ${escapeHtml(ACTION_LABELS[entry.action] || entry.action)}${entry.unit ? " · " + escapeHtml(entry.unit) : ""}
                             </span>
                         </div>
                         <div class="historyDelta">
                             <strong class="${entry.change < 0 ? "down" : "up"}">
-                                ${entry.change > 0 ? "+" : ""}${entry.change}
+                                ${entry.change > 0 ? "+" : ""}${escapeHtml(entry.change)}
                             </strong>
-                            <span>Stock: ${entry.resultingStock}</span>
+                            <span>Stock: ${escapeHtml(entry.resultingStock)}</span>
                         </div>
                     </div>
                 `).join("");
@@ -2284,16 +2366,14 @@ function displayBill(billListObj) {
     billListObj.innerHTML = "";
 
     for (let consumedProduct of myList) {
-        console.log("Renderizando producto de la cuenta:", consumedProduct);
-
-        billListObj.innerHTML += `
-            <div class="billItem" data-id="${consumedProduct.id}">
-                <strong>${consumedProduct.orderid}</strong>
-                <span>${consumedProduct.name}</span>
-                <strong>$${consumedProduct.price}</strong>
+            billListObj.innerHTML += `
+            <div class="billItem" data-id="${escapeHtml(consumedProduct.id)}">
+                <strong>${escapeHtml(consumedProduct.orderid)}</strong>
+                <span>${escapeHtml(consumedProduct.name)}</span>
+                <strong>$${escapeHtml(consumedProduct.price)}</strong>
                 <button class="minusButton" type="button">−</button>
-                <p>${consumedProduct.quantity}</p>
-                <button class="deleteItem" data-id="${consumedProduct.id}">x</button>
+                <p>${escapeHtml(consumedProduct.quantity)}</p>
+                <button class="deleteItem" type="button" data-id="${escapeHtml(consumedProduct.id)}">x</button>
             </div>
         `;
     }
@@ -2323,12 +2403,7 @@ function accumulateActions(action, event) {
     const card = event.target.closest(".productCard");
     if (!card) return;
 
-    console.log("CARD ID:", card.dataset.id);
-    console.log("PRODUCTS:", products);
-
     const product = products.find(prod => String(prod.id) === String(card.dataset.id));
-
-    console.log("FOUND PRODUCT:", product);
 
     if (!product) {
         console.error("Producto no encontrado. ID de tarjeta:", card.dataset.id);
@@ -2346,7 +2421,7 @@ function accumulateActions(action, event) {
             if (obj === undefined) {
                 myList.push({
                     id: product.id,
-                    orderid: myList.length + 1,
+                    orderid: ++billOrderCounter,
                     name: product.name,
                     price: Number(product.price),
                     quantity: 1
@@ -2434,9 +2509,9 @@ function accumulateActions(action, event) {
             for (let productc of myList) {
                 changeListContainer.innerHTML += `
                                 <div class="billItem">
-                                    <span>${productc.name}</span>
-                                    <strong>${productc.currentPrice}</strong>
-                                    <input id="${productc.id}inputChangePrice" type="number" placeholder="Nuevo precio">
+                                    <span>${escapeHtml(productc.name)}</span>
+                                    <strong>${escapeHtml(productc.currentPrice)}</strong>
+                                    <input id="${escapeHtml(productc.id)}inputChangePrice" type="number" placeholder="Nuevo precio">
                                 </div>
                                 `;
             }
@@ -2469,9 +2544,9 @@ function accumulateActions(action, event) {
             for (let productc of myList) {
                 deleteContainer.innerHTML += `
                                 <div class="billItem">
-                                    <strong>${productc.name}</strong>
-                                    <p>${productc.createdIn}</p>
-                                    <span>${productc.id}</span>
+                                    <strong>${escapeHtml(productc.name)}</strong>
+                                    <p>${escapeHtml(productc.createdIn)}</p>
+                                    <span>${escapeHtml(productc.id)}</span>
                                 </div>
                                 `;
             }
@@ -2604,8 +2679,29 @@ filterCat.addEventListener("change", (event) => {
 // --- Product list clicks (bill / changePrice / delete accumulation) ---
 allProducts.addEventListener("click", (event) => {
     accumulateActions(act, event);
-    console.log("product!");
-    console.log(act);
+});
+
+// --- Teclado: las tarjetas de producto y las acciones de la barra
+//     son elementos con rol de botón, así que Enter o Espacio
+//     deben activarlos igual que un clic. ---
+allProducts.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    const card = event.target.closest(".productCard");
+    if (!card) return;
+
+    event.preventDefault();
+    card.click();
+});
+
+actionsBar.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    const option = event.target.closest(".opt");
+    if (!option) return;
+
+    event.preventDefault();
+    option.click();
 });
 
 // --- Categories view ---

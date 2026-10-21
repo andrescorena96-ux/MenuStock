@@ -36,6 +36,10 @@ MenuStock/
 ├── home.css        # Sistema visual completo (tokens en :root)
 ├── home.js         # Lógica de la app (un solo módulo)
 ├── dev-server.js   # Servidor estático para desarrollo local
+├── package.json    # Scripts: npm start / npm test
+├── tests/
+│   ├── e2e.html    # Prueba end-to-end (monta la app real en el navegador)
+│   └── run.js      # Runner: abre la prueba en Edge/Chrome headless
 └── .gitignore
 ```
 
@@ -58,18 +62,32 @@ Organizado en secciones numeradas:
 
 | Sección | Contenido |
 |---|---|
-| 1 | Referencias al DOM |
+| 1 / 1b | Referencias al DOM y utilidades de escape |
 | 2 | Variables de estado |
 | 3 | Persistencia en `localStorage` |
-| 3b–3e | Historial de stock, expresiones de restock, landing |
+| 3b–3e | Historial de stock, expresiones de reposición, landing |
 | 4–5 | Perfiles, gate de contraseña, menú de perfil |
 | 5b | Categorías y subcategorías |
 | 6–7 | Render de productos y búsqueda |
 | 8–10 | Cuenta, modales, confirmar/cancelar |
-| 11 | Modales de inventario (producto, restock, historial) |
+| 11 | Modales de inventario (producto, reposición, historial) |
 | 12–13 | Render de la cuenta y acciones acumulativas |
 | 14 | Event listeners |
 | 15 | Inicialización |
+
+---
+
+## Pruebas
+
+Hay una prueba end-to-end que monta la app real en un navegador headless y maneja la interfaz como lo haría una persona (clics, escritura en campos, elección de opciones):
+
+```bash
+npm test
+```
+
+Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
+
+Cubre 28 casos: arranque, creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock y migración de las claves antiguas de `localStorage`.
 
 ---
 
@@ -135,12 +153,30 @@ La entrada se valida con una expresión regular y se suma término a término: *
 ## Pendientes técnicos
 
 1. **Contraseñas en texto plano.** `localStorage` no cifra nada y es legible por cualquiera con acceso al navegador. Mientras sea local, es aceptable; en cuanto haya backend, esto pasa a ser un problema serio.
-2. **XSS.** Nombres de productos, categorías y perfiles se inyectan con `innerHTML`. Un nombre como `<img src=x onerror=...>` se ejecuta. Hay que escapar o construir con `textContent`.
-3. **Filtrado por precio sin comparador.** `.sort()` sin `compareFn` ordena lexicográficamente, no numéricamente.
-4. **Vista de categoría se pierde al confirmar.** `display(products)` al final de `confirmButton()` ignora el filtro de categoría activo.
+2. **`prompt()` / `alert()` / `confirm()` nativos.** Bloquean la pantalla y se ven fuera de tono con el resto de la app. Deberían ser modales propios de MenúStock.
+3. **CSS con mucho `!important`.** Sobre todo en `#modali` y `#modali-content`, donde cada propiedad está forzada. Funciona, pero cualquier ajuste fino se vuelve frágil.
+4. **Nombres heredados.** `#modali`, `#modali-content` y `.closing` son restos de versiones anteriores; `.closing` convive con `.show` para el mismo efecto.
+5. **El lado "comprar" de la app no existe.** Todo el flujo es del lado del negocio: inventar, reponer y cobrar.
+
+---
+
+## Corregido en la versión actual
+
+| Problema | Solución |
+|---|---|
+| Los nombres con HTML se ejecutaban (XSS) | `escapeHtml()` en todos los puntos de inyección + `safeImageUrl()` para imágenes |
+| Al confirmar una acción se perdía la categoría activa | `refreshProducts()` en vez de `display(products)` |
+| El filtro por precio ordenaba como texto (100 antes que 20) | `.sort((a, b) => a.price - b.price)` |
+| El historial de ventas guardaba `[object Object]` | Renglones estructurados: `{ id, nombre, precio, cantidad }` |
+| Se podía vender más stock del que había | Se valida **antes** de descontar; si no alcanza, la venta se cancela |
+| Perfiles viejos sin `products` reventaban la app | Guards al cargar cada campo del perfil |
+| La barra de acciones no era accesible con teclado | `role="button"` + `tabindex` + activación con Enter/Espacio |
+| Los `console.log` de debug spampeaban la consola | Eliminados |
+| La regla móvil del modal de reposición no aplicaba | Selector corregido (tenía menos especificidad que la base) |
+| `height: 70em` en el overlay | `height: 100%` |
 
 ---
 
 ## Licencia
 
-Por definir.
+MIT
