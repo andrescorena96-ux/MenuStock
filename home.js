@@ -415,6 +415,33 @@ let pendingLoginUserId = null;
 // Producto que se está editando en el formulario. null = alta nueva.
 let editingProduct = null;
 
+// Unidades de medida y cómo se converts entre sí.
+// Las que comparten base se pueden convertir entre sí:
+//   masa    -> kg, g
+//   volumen -> L, ml
+//   conteo  -> und, caja, paq
+const UNIT_FACTORS = {
+    und:  { label: "Unidades",     base: "und", factor: 1 },
+    kg:   { label: "Kilogramos",   base: "g",   factor: 1000 },
+    g:    { label: "Gramos",       base: "g",   factor: 1 },
+    L:    { label: "Litros",       base: "ml",  factor: 1000 },
+    ml:   { label: "Mililitros",   base: "ml",  factor: 1 },
+    caja: { label: "Cajas",        base: "und", factor: 1 },
+    paq:  { label: "Paquetes",     base: "und", factor: 1 }
+};
+
+// Convierte una cantidad de una unidad a otra.
+// Devuelve null si las unidades no son compatibles (kg -> ml).
+function convertirUnidad(cantidad, desdeUnidad, haciaUnidad) {
+    const origen = UNIT_FACTORS[desdeUnidad];
+    const destino = UNIT_FACTORS[haciaUnidad];
+
+    if (!origen || !destino) return cantidad;
+    if (origen.base !== destino.base) return null;
+
+    return (cantidad * origen.factor) / destino.factor;
+}
+
 // Unidades de medida disponibles para un producto
 const UNITS = [
     { id: "und",  label: "Unidades (und)" },
@@ -581,13 +608,28 @@ function storeTypeInfo(storeTypeId) {
 const MAX_HISTORY = 1000;
 
 // Opciones de empaque del Restock. "none" = sin conversión, unidades directas.
+// Cada empaque dice cuántas unidades trae y en qué medida están:
+//   factor -> cuántas unidades trae
+//   unit   -> en qué unidad están esas unidades
+// El stock del producto se guarda SIEMPRE en la unidad del producto:
+// si el empaque es de kilos y el producto se mide en gramos, la app
+// convierte (2 kg entran como 2000 g).
 const PACK_OPTIONS = [
-    { value: "1", label: "Unidad (x1)" },
-    { value: "6", label: "Paquete de 6 (x6)" },
-    { value: "12", label: "Caja (x12)" },
-    { value: "24", label: "Caja (x24)" },
-    { value: "none", label: "Ninguno (unidades directas)" }
+    { value: "1",     label: "Unidad (x1)",        factor: 1,    unit: "und" },
+    { value: "6",     label: "Paquete de 6 (x6)",  factor: 6,    unit: "und" },
+    { value: "12",    label: "Caja (x12)",         factor: 12,   unit: "und" },
+    { value: "24",    label: "Caja (x24)",         factor: 24,   unit: "und" },
+    { value: "kg",    label: "Kilogramo (1 kg)",   factor: 1,    unit: "kg" },
+    { value: "500g",  label: "Medio kilo (500 g)", factor: 500,  unit: "g" },
+    { value: "L",     label: "Litro (1 L)",        factor: 1,    unit: "L" },
+    { value: "1000ml",label: "Litro (1000 ml)",    factor: 1000, unit: "ml" },
+    { value: "none",  label: "Ninguno (directo)",  factor: 1,    unit: null }
 ];
+
+// El empaque elegido por su clave
+function packByValue(value) {
+    return PACK_OPTIONS.find(o => o.value === String(value)) || PACK_OPTIONS[0];
+}
 
 const ACTION_LABELS = {
     created: "Producto creado",
@@ -798,7 +840,7 @@ function formatHistoryDate(isoString) {
    mano: nunca se ejecuta el texto del usuario como JavaScript.
    ============================================================ */
 
-function parseRestockExpression(text, packValue) {
+function parseRestockExpression(text, pack) {
     const clean = String(text ?? "").replace(/\s+/g, "");
 
     if (clean === "") {
@@ -812,7 +854,8 @@ function parseRestockExpression(text, packValue) {
     }
 
     const terms = clean.match(/[+-]?\d+(?:\.\d+)?/g).map(Number);
-    const packSize = packValue === "none" ? 1 : Number(packValue) || 1;
+    const empaque = typeof pack === "object" && pack !== null ? pack : packByValue(pack);
+    const packSize = empaque && empaque.factor ? empaque.factor : 1;
 
     let units = 0;
     terms.forEach((term, index) => {
@@ -824,8 +867,21 @@ function parseRestockExpression(text, packValue) {
         empty: false,
         units: Math.round(units),
         terms: terms,
-        packSize: packSize
+        packSize: packSize,
+        packUnit: empaque ? empaque.unit : null
     };
+}
+
+// Cuántas unidades del producto entran realmente, convirtiendo
+// desde la unidad del empaque a la unidad del producto.
+// Devuelve null si las unidades no son compatibles.
+function unidadesEnUnidadProducto(units, packUnit, producto) {
+    const unidadProducto = unitLabel(producto);
+
+    if (!packUnit || packUnit === unidadProducto) return units;
+
+    const convertidas = convertirUnidad(units, packUnit, unidadProducto);
+    return convertidas === null ? null : Math.round(convertidas);
 }
 
 function packLabel(packValue) {
@@ -849,7 +905,7 @@ function updatePreview(productId) {
     const preview = document.getElementById(`preview-${productId}`);
     if (!packSelect || !qtyInput || !preview) return;
 
-    const parsed = parseRestockExpression(qtyInput.value, packSelect.value);
+    const parsed = parseRestockExpression(qtyInput.value, packByValue(packSelect.value));
 
     preview.classList.remove("positive", "negative", "invalid");
 
@@ -864,8 +920,21 @@ function updatePreview(productId) {
         return;
     }
 
-    preview.textContent = `= ${parsed.units > 0 ? "+" : ""}${parsed.units} u.`;
-    preview.classList.add(parsed.units < 0 ? "negative" : "positive");
+    // La conversión a la unidad del producto
+    const producto = products.find(p => String(p.id) === String(productId));
+    const unidades = producto
+        ? unidadesEnUnidadProducto(parsed.units, parsed.packUnit, producto)
+        : parsed.units;
+
+    if (unidades === null) {
+        preview.textContent = "no convertible";
+        preview.classList.add("invalid");
+        return;
+    }
+
+    const unidad = producto ? unitLabel(producto) : "u";
+    preview.textContent = `= ${unidades > 0 ? "+" : ""}${unidades} ${unidad}`;
+    preview.classList.add(unidades < 0 ? "negative" : "positive");
 }
 
 function getDisplayedRestockItems() {
@@ -1225,9 +1294,26 @@ function showProfileForm() {
    (o al cancelar).
    ============================================================ */
 
+/**
+ * Cierra las ventanas de nivel aplicación para que nunca se superpongan
+ * con un modal nuevo: la pantalla de perfiles y el menú de perfil.
+ *
+ * OJO: los diálogos de la app (los avisos y formularios) NO se tocan
+ * aquí, porque a propósito se abren ENCIMA de un modal de inventario
+ * (por ejemplo, el aviso de validación del formulario de producto).
+ */
+function cerrarTodosLosModales() {
+    profileSection.classList.add("hidden");
+    profileMenu.classList.add("hidden");
+    closeCardMenus();
+}
+
 // Abrir el flujo de creación de perfil
 function openProfileCreation() {
-    // Se oculta por completo: si no, las dos capas se superponen.
+    // Se cierra todo lo demás: si no, las dos capas se superponen.
+    cerrarTodosLosModales();
+
+    // Y se oculta la pantalla de perfiles mientras dura el flujo.
     profileSection.classList.add("hidden");
 
     selectedStoreType = null;
@@ -3446,21 +3532,39 @@ async function confirmButton() {
             for (const row of parsedRows) {
                 const { product, parsed, packSelect, qtyInput } = row;
 
-                product.quantity += parsed.units;
+                // El empaque puede venir en otra unidad (por ejemplo, kilos)
+                // y el producto medirse en otra (gramos): se convierte.
+                const unidades = unidadesEnUnidadProducto(
+                    parsed.units,
+                    parsed.packUnit,
+                    product
+                );
+
+                if (unidades === null) {
+                    await showAlert({
+                        title: "Unidades incompatibles",
+                        message:
+                            `No se puede convertir el empaque "${packLabel(packSelect.value)}" ` +
+                            `a la unidad del producto "${unitLabel(product)}".`
+                    });
+                    return;
+                }
+
+                product.quantity += unidades;
 
                 const isAdjustment = packSelect.value === "none";
-                const detail = `${packLabel(packSelect.value)} · ${qtyInput.value.trim()}`;
+                const detalle = `${packLabel(packSelect.value)} · ${qtyInput.value.trim()}`;
 
                 recordStockChange(
                     product,
                     isAdjustment ? "adjustment" : "restock",
-                    parsed.units,
-                    detail
+                    unidades,
+                    detalle
                 );
 
                 // "Ninguno" no es un empaque, no se guarda como preferencia
                 if (!isAdjustment) {
-                    restockPreferences[product.id] = Number(packSelect.value);
+                    restockPreferences[product.id] = packSelect.value;
                 }
             }
 
@@ -3594,6 +3698,12 @@ function cancelCurrentAction() {
    ============================================================ */
 
 function myInventaryActions(action, productosPrecargados = null) {
+    // Antes de abrir un modal nuevo se cierra cualquier otro: así
+    // dos ventanas nunca se superponen.
+    overlay.classList.add("hidden");
+    modali.classList.remove("show");
+    modali.classList.add("closing");
+
     overlay.classList.remove("hidden");
     modali.classList.remove("closing");
     modali.classList.add("show");
@@ -4212,7 +4322,8 @@ function myInventaryActions(action, productosPrecargados = null) {
                         Puedes escribir sumas y restas. El primer número usa el empaque elegido
                         y los siguientes son unidades sueltas:
                         <code>Paquete de 6 · 2 + 16</code> = 28 unidades.
-                        Con <code>Ninguno</code> no hay conversión, así que <code>-3</code> descuenta 3 unidades.
+                        Si el empaque va en otra medida (kilos, litros) y el producto se mide
+                        en otra (gramos, mililitros), la app convierte solo.
                     </p>
                     <input type="text" id="restockFilter" class="inventorySearch inp" placeholder="Filtrar por nombre..." style="margin-bottom: 1rem; width: 100%;">
 

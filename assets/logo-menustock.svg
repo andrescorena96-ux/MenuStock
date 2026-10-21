@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="MenúStock">
+  <title>MenúStock</title>
+
+  <!-- Fondo crema -->
+  <rect width="800" height="800" fill="#F7F1E5"/>
+
+  <!--
+    Icono: carrito de compras en terracota con una lista de inventario
+    dentro de la cesta. El asa, la cesta y las ruedas van en terracota;
+    la lista va en crema (recortada sobre la cesta).
+  -->
+  <g transform="translate(400 330)">
+
+    <!-- Asa del carrito -->
+    <path d="M-205 -125 h52 l62 200"
+          fill="none"
+          stroke="#B6502F"
+          stroke-width="27"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Cesta: trapecio abierto por arriba -->
+    <path d="M-96 -32 h272 l-38 138 h-196 z" fill="#B6502F"/>
+
+    <!-- Listado de inventario dentro de la cesta (en crema) -->
+    <g stroke="#F7F1E5" stroke-width="14" stroke-linecap="round" fill="none">
+      <path d="M-58 8 h22"/>
+      <path d="M-58 34 h22"/>
+      <path d="M-58 60 h22"/>
+      <path d="M-12 8 h132"/>
+      <path d="M-12 34 h132"/>
+      <path d="M-12 60 h92"/>
+    </g>
+
+    <!-- Ruedas -->
+    <circle cx="-38" cy="148" r="26" fill="#B6502F"/>
+    <circle cx="108" cy="148" r="26" fill="#B6502F"/>
+  </g>
+
+  <!-- Nombre de la marca -->
+  <text x="400"
+        y="640"
+        text-anchor="middle"
+        font-family="Fraunces, Georgia, 'Times New Roman', serif"
+        font-size="104"
+        font-weight="600"
+        letter-spacing="-2"
+        fill="#2A1B16">MenúStock</text>
+</svg>

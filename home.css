@@ -1570,12 +1570,17 @@ select.inp:focus {
     z-index: 9999;
 
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
+    gap: 1.1rem;
 
-    background: rgba(20, 8, 10, 0.88);
+    /* El mismo crema del logo: al no tener marco, no se ve la union. */
+    background-color: #F7F1E5;
 
     padding: 20px;
+
+    overflow-y: auto;
 }
 
 .profileSection.hidden {
@@ -4193,6 +4198,42 @@ li:focus-visible {
     border-color: var(--rust-light);
     color: var(--ink);
 }
+
+/* =========================================================
+   PORTADA CON EL LOGO
+   Splash con la imagen oficial de MenúStock.
+   ========================================================= */
+
+.portada-splash {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 100vh;
+    background-color: #F7F1E5; /* Tono de fondo que combina con la imagen */
+}
+
+.img-portada {
+    max-width: 350px;
+    width: 80%;
+    height: auto;
+}
+
+/* Cuando la portada va dentro de la pantalla de perfiles (que ya es
+   un overlay a pantalla completa) el logo no puede ocupar toda la
+   altura: la lista de perfiles tiene que verse sin hacer scroll. */
+.portada-splash--compacta {
+    min-height: auto;
+    flex-shrink: 0;
+
+    padding: 0.5rem 0 0;
+}
+
+.portada-splash--compacta .img-portada {
+    max-width: 240px;
+    width: 58%;
+}
+
 
 /* =========================================================
    FORMULARIO DE NUEVO PERFIL

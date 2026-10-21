@@ -290,7 +290,21 @@ El formulario es un diálogo propio de MenúStock, no los diálogos del navegado
 
 Una tienda de ropa nueva además nace con dos categorías sugeridas (*Hombre*, *Mujer*), cada una con subcategorías, que el usuario puede renombrar, borrar o ampliar.
 
-### 6.5 Perfiles y contraseñas
+### 6.5 Portada con el logo
+
+La pantalla de selección de perfiles (y el gate de contraseña) abren con la **imagen oficial** de MenúStock, centrada sobre el fondo crema de la marca:
+
+```html
+<div class="portada-splash portada-splash--compacta">
+    <img src="assets/logo-menustock.png" alt="MenúStock" class="img-portada">
+</div>
+```
+
+El logo vive en `assets/logo-menustock.png` (800×800 px) y su versión vectorial en `assets/logo-menustock.svg`: fondo crema `#F7F1E5`, carrito en terracota `#B6502F` con la lista de inventario dentro, y el nombre "MenúStock" en marrón oscuro `#2A1B16` con Fraunces.
+
+La clase `.portada-splash` a pantalla completa (`min-height: 100vh`) sirve para una portada independiente; la variante `--compacta` reduce la altura para que la lista de perfiles quepa sin hacer scroll. El fondo de la pantalla de perfiles usa el mismo crema del logo, de modo que la unión entre la imagen y el fondo no se nota.
+
+### 6.6 Perfiles y contraseñas
 
 - Multiperfil en un mismo dispositivo, cada uno con datos completamente aislados.
 - Contraseña por perfil, guardada en texto plano (ver *Límites*).
@@ -298,18 +312,18 @@ Una tienda de ropa nueva además nace con dos categorías sugeridas (*Hombre*, *
 - Se puede renombrar un perfil (con validación de duplicados) o cambiar de perfil en cualquier momento.
 - Al crear el perfil se elige el **tipo de negocio**, que adapta la app: una tienda de ropa habilita tallas, colores y variantes.
 
-### 6.6 Inventario
+### 6.7 Inventario
 
 - Alta de productos con nombre, precio, imagen (URL), stock inicial, categoría y subcategoría.
 - **Imagen por URL** con validación: solo se aceptan `http(s)` y `data:image/*`. Si la URL no es válida o falta, se usa una imagen de relleno.
 - Si el producto no tiene categoría, aparece en la tarjeta "Sin categoría" de la vista de categorías (sirve para los productos que ya existían antes de las categorías).
 - La grilla de producto muestra: imagen, nombre, precio, stock, etiqueta de categoría y —en ropa— resumen de tallas y colores.
 
-### 6.7 Búsqueda y filtros
+### 6.8 Búsqueda y filtros
 
 Cuatro modos, conmutables desde un desplegable: **nombre**, **precio máximo**, **precio mínimo**, **cantidad en stock**. Al cambiar de modo el campo se reconfigura solo (tipo `text` o `number`) y el placeholder se adapta. La búsqueda se aplica sobre los productos **visibles en la categoría actual**, no sobre todo el catálogo.
 
-### 6.8 Categorías y subcategorías
+### 6.9 Categorías y subcategorías
 
 - Árbol de dos niveles: categoría → subcategorías.
 - Crear, renombrar y eliminar, tanto categorías como subcategorías.
@@ -317,7 +331,7 @@ Cuatro modos, conmutables desde un desplegable: **nombre**, **precio máximo**, 
 - **Al eliminar una categoría, los productos no se borran**: quedan como "Sin categoría". Al eliminar una subcategoría, los productos permanecen en su categoría. Nunca se pierde inventario por reorganizar.
 - **Migas de pan** para volver a la raíz o a la categoría padre.
 
-### 6.9 Reposición (Restock)
+### 6.10 Reposición (Restock)
 
 El módulo más elaborado de la app, porque el stock de un negocio real no siempre entra por unidades.
 
@@ -348,7 +362,7 @@ Ninguno      · -3       →  descuenta 3 unidades (sin conversión)
 - **Preferencia de empaque por producto**: se recuerda el empaque usado la última vez.
 - **Validación en dos pasos**: primero se revisan todas las filas y solo después se aplica nada. Antes se modificaba sobre la marcha y una fila inválida dejaba la mitad del cambio aplicada.
 
-### 6.10 Proveedores y pedido de reposición
+### 6.11 Proveedores y pedido de reposición
 
 En la vista **Compras** hay dos botones nuevos:
 
@@ -357,7 +371,7 @@ En la vista **Compras** hay dos botones nuevos:
 
 El botón **+ Generar compra con estos** de la lista de reorden abre directamente el formulario de compra con los productos que hay que reponer y la cantidad sugerida para dejar el stock por encima del mínimo.
 
-### 6.11 Compras a proveedores
+### 6.12 Compras a proveedores
 
 El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta.
 
@@ -367,7 +381,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Detalle**: cada compra se puede abrir en un diálogo con su fecha, sus renglones y su total.
 - **Anular**: devuelve el stock y deja un movimiento `purchaseVoid`. La compra **no se borra** — queda marcada como anulada, para no perder la trazabilidad.
 
-### 6.12 Cuenta y venta
+### 6.13 Cuenta y venta
 
 - Se arma haciendo clic en las tarjetas de producto.
 - El panel inferior (panel de cuenta) muestra cada renglón con cantidad, precio y subtotal, más el total general.
@@ -376,7 +390,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Validación de stock antes de cobrar**: si no hay unidades suficientes, la venta se cancela y se dice exactamente qué producto falta y cuántas unidades. El inventario nunca queda en negativo.
 - El historial de ventas guarda renglones estructurados (`id`, `nombre`, `precio`, `cantidad`), total y fecha.
 
-### 6.13 Historial de inventario
+### 6.14 Historial de inventario
 
 Registro cronológico de **todo** movimiento de stock, del más reciente al más antiguo.
 
@@ -396,7 +410,7 @@ El historial **no inventa el pasado**: el stock que ya existía antes de activar
 
 Se conservan hasta **1.000 movimientos** por perfil, y los más antiguos se descartan para que `localStorage` no crezca sin límite.
 
-### 6.14 Tienda de ropa: variantes
+### 6.15 Tienda de ropa: variantes
 
 Un producto de ropa puede manejarse de cuatro maneras:
 
@@ -409,7 +423,7 @@ Un producto de ropa puede manejarse de cuatro maneras:
 
 El stock total del producto es la suma de sus variantes. La tarjeta muestra un resumen (`Tallas: S, M, L · Colores: Negro, Blanco`).
 
-### 6.15 Exportar e importar datos
+### 6.16 Exportar e importar datos
 
 Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el inventario.
 
@@ -417,7 +431,7 @@ Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el 
 - **Importar** → reemplaza los datos del perfil actual con los del archivo, previa confirmación.
 - **La contraseña nunca se exporta ni se importa**: es un secreto y debe quedarse solo en el dispositivo.
 
-### 6.16 Sistema de diálogos
+### 6.17 Sistema de diálogos
 
 La app **no usa `prompt()`, `alert()` ni `confirm()` nativos**: bloquean la pantalla, no admiten formato y rompen el diseño. Hay una capa propia con tres funciones que son promesas:
 
@@ -431,7 +445,7 @@ await showPrompt({ title, label, validate });   // pedir un dato -> string o nul
 
 Se cierran con **Escape** o haciendo clic en el fondo. El foco va solo al primer campo. Los diálogos de confirmación destructiva se pintan en color de peligro.
 
-### 6.17 Landing page
+### 6.18 Landing page
 
 Ocho secciones: hero, sobre nosotros, misión, historia, lo que ofrece, pensado para tu negocio, transición y mensaje final.
 
