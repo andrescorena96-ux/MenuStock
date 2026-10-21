@@ -27,6 +27,12 @@ const categoriesBt = document.getElementById("categoriesBt");
 const newCategoryBt = document.getElementById("newCategoryBt");
 const historyBt = document.getElementById("historyBt");
 
+// Aviso de modo (cambiar precio / eliminar producto)
+const modeBanner = document.getElementById("modeBanner");
+const modeBannerIcon = document.getElementById("modeBannerIcon");
+const modeBannerText = document.getElementById("modeBannerText");
+const modeCancelBt = document.getElementById("modeCancelBt");
+
 // Bienvenida / landing (MenúStock)
 const appRoot = document.getElementById("appRoot");
 const welcomeSection = document.getElementById("welcomeSection");
@@ -333,10 +339,19 @@ dialogBackdrop.addEventListener("click", () => {
 
 document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (dialogRoot.classList.contains("hidden")) return;
 
-    const cancelBtn = dialogActions.querySelector(".cancelBt");
-    if (cancelBtn) cancelBtn.click();
+    // 1) Si hay un diálogo abierto, sale el diálogo.
+    if (!dialogRoot.classList.contains("hidden")) {
+        const cancelBtn = dialogActions.querySelector(".cancelBt");
+        if (cancelBtn) cancelBtn.click();
+        return;
+    }
+
+    // 2) Si no, sale del modo "cambiar precio" / "eliminar producto".
+    if (isActionMode()) {
+        event.preventDefault();
+        resetActionMode();
+    }
 });
 
 const USERS_KEY = "menuStockUsers";
@@ -399,6 +414,21 @@ const PACK_OPTIONS = [
     { value: "24", label: "Caja (x24)" },
     { value: "none", label: "Ninguno (unidades directas)" }
 ];
+
+// Modos de la barra de acciones: el producto queda a la espera de
+// que el usuario elija cuáles quiere modificar o borrar.
+const ACTION_MODES = {
+    changePrice: {
+        icon: "🏷️",
+        text: "Estás cambiando precios. Haz clic en los productos que quieras modificar.",
+        danger: false
+    },
+    delete: {
+        icon: "🗑️",
+        text: "Estás eliminando productos. Haz clic en los que quieras eliminar.",
+        danger: true
+    }
+};
 
 const ACTION_LABELS = {
     created: "Producto creado",
@@ -857,6 +887,10 @@ function selectProfile(userId) {
 
     hideProfiles();
 
+    // Cambiar de perfil sale del modo de acción: el modo pertenece
+    // al inventario del perfil anterior.
+    resetActionMode();
+
     // Cada perfil entra viendo todos sus productos
     currentCategoryId = null;
     currentSubcategoryId = null;
@@ -1132,6 +1166,72 @@ function countProductsIn(categoryId, subcategoryId = null) {
 // Redibuja la lista respetando la categoría actual
 function refreshProducts() {
     display(getVisibleProducts());
+    highlightSelected();
+}
+
+
+/* ============================================================
+   5e. MODO DE ACCIÓN (cambiar precio / eliminar producto)
+   El modo se hace visible: un aviso arriba de la barra dice qué
+   estás haciendo y cómo salir, el botón queda marcado, y las
+   tarjetas elegidas se resaltan.
+   ============================================================ */
+
+function isActionMode() {
+    return act === "changePrice" || act === "delete";
+}
+
+// Pinta el aviso de modo y marca el botón activo
+function updateActionMode() {
+    const info = ACTION_MODES[act];
+
+    if (!info) {
+        modeBanner.classList.add("hidden");
+        changePrice.classList.remove("active");
+        delProduct.classList.remove("active");
+        allProducts.classList.remove("modeDelete");
+        return;
+    }
+
+    modeBanner.classList.remove("hidden");
+    modeBanner.classList.toggle("danger", info.danger);
+    modeBannerIcon.textContent = info.icon;
+    modeBannerText.textContent = info.text;
+
+    changePrice.classList.toggle("active", act === "changePrice");
+    delProduct.classList.toggle("active", act === "delete");
+    allProducts.classList.toggle("modeDelete", act === "delete");
+}
+
+// Marca las tarjetas que ya están en la cola del modo actual
+function highlightSelected() {
+    const enCola = isActionMode()
+        ? new Set(myList.map(item => String(item.id)))
+        : new Set();
+
+    allProducts.querySelectorAll(".productCard").forEach(card => {
+        card.classList.toggle("selected", enCola.has(String(card.dataset.id)));
+    });
+}
+
+// Salir del modo: cancela la acción en curso y deja todo como estaba
+function resetActionMode() {
+    if (isActionMode()) {
+        cancelCurrentAction();
+    }
+}
+
+// La barra inferior solo se ve en la vista de productos.
+// Mientras el panel de la cuenta está abierto (venta, cambio de precio
+// o eliminación), ese panel ocupa su lugar: tiene sus propios botones
+// de Aceptar y Cancelar.
+function syncActionsBar() {
+    const enProductos = categoriesView.classList.contains("hidden")
+        && purchasesView.classList.contains("hidden");
+
+    const panelAbierto = accumulatePanel.classList.contains("show");
+
+    actionsBar.classList.toggle("hidden", !enProductos || panelAbierto);
 }
 
 // ----------------------------------------
@@ -1151,23 +1251,27 @@ function showProductsView() {
     searchPan.classList.remove("hidden");
     productsTitle.classList.remove("hidden");
     allProducts.classList.remove("hidden");
-    actionsBar.classList.remove("hidden");
 
     renderBreadcrumb();
     refreshProducts();
+    syncActionsBar();
 }
 
 function showCategoriesView() {
+    // Cambiar de vista sale del modo de acción: si no, al volver se
+    // seguiría esperando que el usuario eligiera un producto para borrar.
+    resetActionMode();
+
     setActiveNav("categories");
     purchasesView.classList.add("hidden");
     searchPan.classList.add("hidden");
     productsTitle.classList.add("hidden");
     allProducts.classList.add("hidden");
-    actionsBar.classList.add("hidden");
     breadcrumb.classList.add("hidden");
 
     categoriesView.classList.remove("hidden");
     renderCategories();
+    syncActionsBar();
 }
 
 function openCategory(categoryId, subcategoryId = null) {
@@ -1465,17 +1569,19 @@ async function deleteSubcategory(categoryId, subcategoryId) {
    ============================================================ */
 
 function showPurchasesView() {
+    resetActionMode();
+
     setActiveNav("purchases");
 
     searchPan.classList.add("hidden");
     productsTitle.classList.add("hidden");
     allProducts.classList.add("hidden");
-    actionsBar.classList.add("hidden");
     breadcrumb.classList.add("hidden");
     categoriesView.classList.add("hidden");
 
     purchasesView.classList.remove("hidden");
     renderPurchases();
+    syncActionsBar();
 }
 
 function renderPurchases() {
@@ -1812,6 +1918,10 @@ function updateBill() {
     // MUY IMPORTANTE:
     // Al terminar o cancelar cualquier acción, se vuelve al modo cuenta.
     act = "bill";
+
+    updateActionMode();
+    highlightSelected();
+    syncActionsBar();
 }
 
 function addToHistorial() {
@@ -1840,6 +1950,9 @@ function closeModal() {
     modali.classList.remove("show");
     modali.classList.add("closing");
     act = "bill";
+
+    updateActionMode();
+    syncActionsBar();
 }
 
 
@@ -2385,6 +2498,9 @@ async function confirmButton() {
     // refreshProducts() respeta la categoría activa.
     refreshProducts();
 
+    updateActionMode();
+    syncActionsBar();
+
     if (messageAfterSave) {
         await showAlert(messageAfterSave);
     }
@@ -2597,17 +2713,21 @@ function myInventaryActions(action) {
             ` : "";
 
             modalcont.innerHTML = `
-                <div class="modal show">
-                    <h3 id="modalTitle">¡Agrega un nuevo producto!</h3>
+                <div class="productFormModal">
 
-                    <div class="productInputs">
+                    <div class="productFormHeader">
+                        <h3 id="modalTitle">¡Agrega un nuevo producto!</h3>
+                        <p class="productFormSubtitle">
+                            El nombre y el precio son obligatorios. El resto de los campos
+                            se puede completar más adelante.
+                        </p>
+                    </div>
+
+                    <div class="productFormGrid">
                         <input id="newName" type="text" placeholder="Nombra tu producto">
                         <input id="nprice" type="number" placeholder="Ingresa precio">
                         <input id="nimg" type="url" placeholder="Imagen URL">
                         <input id="nstock" type="number" placeholder="Stock inicial">
-                    </div>
-
-                    <div class="productInputs categoryInputs">
                         <select id="ncategory">${categoryOptions}</select>
                         <select id="nsubcategory"></select>
                     </div>
@@ -2618,6 +2738,7 @@ function myInventaryActions(action) {
                         <button id="inventaryCancelBt" class="cancelBt" type="button">Cancelar</button>
                         <button id="inventaryConfirmBt" class="confirmBt" type="button">Aceptar</button>
                     </div>
+
                 </div>
             `;
 
@@ -3137,6 +3258,8 @@ async function accumulateActions(action, event) {
     accumulatePanel.classList.remove("closing");
     accumulatePanel.classList.add("show");
 
+    syncActionsBar();
+
     let obj = myList.find(value => String(value.id) === String(product.id));
 
     switch (action) {
@@ -3156,6 +3279,8 @@ async function accumulateActions(action, event) {
 
             // Sumar el precio al total
             bill += Number(product.price);
+
+            highlightSelected();
 
             // Crear el panel de la cuenta
             accModalContent.innerHTML = `
@@ -3216,6 +3341,8 @@ async function accumulateActions(action, event) {
                     name: product.name,
                     currentPrice: product.price
                 });
+
+                highlightSelected();
             } else {
                 await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de cambio de precio." });
                 return;
@@ -3251,6 +3378,8 @@ async function accumulateActions(action, event) {
                     name: product.name,
                     createdIn: product.createdIn
                 });
+
+                highlightSelected();
             } else {
                 await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de eliminación." });
                 return;
@@ -3277,6 +3406,10 @@ async function accumulateActions(action, event) {
             break;
         }
     }
+
+    // El panel ya tiene su contenido: se mide para empujar el contenido
+    // y que la barra de acciones no quede tapada.
+    syncActionsBar();
 }
 
 
@@ -3418,16 +3551,6 @@ allProducts.addEventListener("keydown", (event) => {
     card.click();
 });
 
-actionsBar.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-
-    const option = event.target.closest(".opt");
-    if (!option) return;
-
-    event.preventDefault();
-    option.click();
-});
-
 // --- Categories view ---
 productsBt.addEventListener("click", () => {
     // Volver a "todos los productos", sin categoría seleccionada
@@ -3537,8 +3660,19 @@ importFileInput.addEventListener("change", async () => {
     if (file) await importProfileData(file);
 });
 
+// --- Aviso de modo ---
+modeCancelBt.addEventListener("click", () => {
+    resetActionMode();
+});
+
 // --- Accumulate panel buttons ---
 deleteProduct.addEventListener("click", () => {
+    // Si ya estamos en modo eliminar, un segundo clic cancela el modo.
+    if (act === "delete") {
+        resetActionMode();
+        return;
+    }
+
     myList = [];
     act = "delete";
 
@@ -3546,30 +3680,44 @@ deleteProduct.addEventListener("click", () => {
 
     accModalContent.innerHTML = `
         <span class="noProductsYet">
-            Aún no hay productos, haz click en ellos para eliminarlos
+            Haz clic en los productos que quieras eliminar.
         </span>
     `;
 
     accumulatePanel.classList.remove("hidden");
     accumulatePanel.classList.remove("closing");
     accumulatePanel.classList.add("show");
+
+    updateActionMode();
+    highlightSelected();
+    syncActionsBar();
 });
 
 changePrice.addEventListener("click", () => {
+    // Si ya estamos en modo cambiar precio, un segundo clic cancela.
+    if (act === "changePrice") {
+        resetActionMode();
+        return;
+    }
+
     myList = [];
     act = "changePrice";
 
     accConfirmBt.classList.add("hidden");
 
     accModalContent.innerHTML = `
-        <span>
-            Aún no hay productos, haz click en ellos para añadirlos
+        <span class="noProductsYet">
+            Haz clic en los productos cuyo precio quieras cambiar.
         </span>
     `;
 
     accumulatePanel.classList.remove("hidden");
     accumulatePanel.classList.remove("closing");
     accumulatePanel.classList.add("show");
+
+    updateActionMode();
+    highlightSelected();
+    syncActionsBar();
 });
 
 accCancelBt.addEventListener("click", cancelCurrentAction);
@@ -3588,6 +3736,10 @@ restock.addEventListener("click", async () => {
 });
 
 addProduct.addEventListener("click", () => {
+    // Agregar un producto cancela cualquier otro modo: no tiene sentido
+    // abrir el formulario de alta encima del panel de borrado.
+    resetActionMode();
+
     act = "addProduct";
     myInventaryActions('addProduct');
 });

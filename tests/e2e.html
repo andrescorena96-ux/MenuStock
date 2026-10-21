@@ -314,6 +314,92 @@ try {
         movs.map(m => `${m.action}:${m.change}`).join(", "));
 
     // =========================================================
+    // BARRA DE ACCIONES: modo visible + resaltado
+    // =========================================================
+    click("#productsBt");
+    await new Promise(r => setTimeout(r, 60));
+
+    ok("La barra de acciones esta en la vista de productos",
+        !document.getElementById("actionsBar").classList.contains("hidden"));
+    ok("Agregar producto ocupa la fila completa",
+        document.getElementById("addProduct").classList.contains("actBtnWide"));
+    ok("Las tres acciones son botones de verdad",
+        document.getElementById("addProduct").tagName === "BUTTON" &&
+        document.getElementById("changePrice").tagName === "BUTTON" &&
+        document.getElementById("delProduct").tagName === "BUTTON");
+
+    // Modo "cambiar precio"
+    ok("El aviso de modo arranca oculto",
+        document.getElementById("modeBanner").classList.contains("hidden"));
+
+    click("#changePrice");
+    await new Promise(r => setTimeout(r, 60));
+
+    ok("El aviso de modo aparece al elegir una accion",
+        !document.getElementById("modeBanner").classList.contains("hidden"));
+    ok("El aviso dice que estas cambiando precios",
+        document.getElementById("modeBannerText").textContent.includes("cambiando precios"),
+        document.getElementById("modeBannerText").textContent);
+    ok("El boton de la accion activa queda marcado",
+        document.getElementById("changePrice").classList.contains("active"));
+
+    // Elegir un producto lo resalta
+    click(".productCard");
+    await new Promise(r => setTimeout(r, 60));
+    ok("El producto elegido se resalta",
+        document.querySelectorAll(".productCard.selected").length === 1,
+        `${document.querySelectorAll(".productCard.selected").length} resaltados`);
+
+    // Escape sale del modo
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await new Promise(r => setTimeout(r, 60));
+
+    ok("Escape sale del modo de accion",
+        document.getElementById("modeBanner").classList.contains("hidden") &&
+        !document.getElementById("changePrice").classList.contains("active"));
+    ok("Al salir del modo se quita el resaltado",
+        document.querySelectorAll(".productCard.selected").length === 0);
+
+    // Modo "eliminar": el aviso va en rojo y el resaltado tambien
+    click("#delProduct");
+    await new Promise(r => setTimeout(r, 60));
+    ok("El modo eliminar avisa en color de peligro",
+        document.getElementById("modeBanner").classList.contains("danger"));
+    ok("La lista de productos marca el modo eliminar",
+        document.getElementById("productList").classList.contains("modeDelete"));
+
+    click(".productCard");
+    await new Promise(r => setTimeout(r, 60));
+    ok("En modo eliminar el producto tambien se resalta",
+        document.querySelectorAll(".productCard.selected").length === 1);
+
+    // El boton "Cancelar" del aviso sale del modo
+    click("#modeCancelBt");
+    await new Promise(r => setTimeout(r, 60));
+    ok("El boton Cancelar del aviso sale del modo",
+        document.getElementById("modeBanner").classList.contains("hidden") &&
+        !document.getElementById("delProduct").classList.contains("active"));
+
+    // Cambiar de vista tambien sale del modo
+    click("#delProduct");
+    await new Promise(r => setTimeout(r, 60));
+    ok("El modo eliminar queda activo",
+        !document.getElementById("modeBanner").classList.contains("hidden"));
+
+    click("#categoriesBt");
+    await new Promise(r => setTimeout(r, 60));
+    ok("Cambiar de vista sale del modo de accion",
+        document.getElementById("modeBanner").classList.contains("hidden") &&
+        !document.getElementById("delProduct").classList.contains("active"));
+    ok("La barra de acciones se oculta en la vista de categorias",
+        document.getElementById("actionsBar").classList.contains("hidden"));
+
+    click("#productsBt");
+    await new Promise(r => setTimeout(r, 60));
+    ok("La barra de acciones vuelve en la vista de productos",
+        !document.getElementById("actionsBar").classList.contains("hidden"));
+
+    // =========================================================
     // MODULO DE COMPRAS A PROVEEDORES
     // =========================================================
     click("#purchasesBt");
@@ -444,6 +530,70 @@ try {
     ok("El ultimo perfil usado se migra a menuStockCurrentUser",
         localStorage.getItem("menuStockCurrentUser") === "legacy-1",
         String(localStorage.getItem("menuStockCurrentUser")));
+
+    // =========================================================
+    // FORMULARIO DE ALTA DE PRODUCTO
+    // =========================================================
+    localStorage.clear();
+    localStorage.setItem("menuStockUsers", JSON.stringify([{
+        id: "ropa-1",
+        profile: { name: "Boutique" },
+        password: null,
+        storeType: "clothing",
+        clothingConfig: { sizeSystem: "letter", sizeList: ["XS", "S", "M", "L"] },
+        products: [],
+        restockPreferences: {},
+        historial: [],
+        stockHistory: [],
+        categories: [],
+        purchases: []
+    }]));
+    localStorage.setItem("menuStockCurrentUser", "ropa-1");
+
+    try {
+        await import("../home.js?ropa=1");
+    } catch (e) {
+        // La instancia nueva puede chocar con el DOM ya montado.
+    }
+
+    await waitFor(() => document.getElementById("addProduct") !== null);
+    click("#addProduct");
+    await waitFor(() => document.getElementById("variantModeGrid") !== null);
+
+    ok("El formulario de alta usa la pantalla completa",
+        document.querySelector(".productFormModal") !== null &&
+        document.querySelector(".modal.show") === null);
+    ok("Los campos del formulario van en una rejilla",
+        document.querySelectorAll(".productFormGrid input").length === 4 &&
+        document.querySelectorAll(".productFormGrid select").length === 2,
+        `${document.querySelectorAll(".productFormGrid input").length} inputs, ${document.querySelectorAll(".productFormGrid select").length} selects`);
+    ok("El titulo del formulario encabeza la pantalla",
+        document.getElementById("modalTitle").textContent.includes("Agrega un nuevo producto"),
+        document.getElementById("modalTitle").textContent);
+
+    // Tienda de ropa: modos de variante
+    ok("La tienda de ropa muestra los 4 modos de variante",
+        document.querySelectorAll("#variantModeGrid .storeTypeOption").length === 4);
+
+    const modos = [...document.querySelectorAll("#variantModeGrid .storeTypeOption")];
+    ok("El modo por defecto es Articulo unico y es el unico marcado",
+        modos[0].classList.contains("selected") &&
+        modos.slice(1).every(b => !b.classList.contains("selected")));
+
+    modos[3].click();
+    await new Promise(r => setTimeout(r, 120));
+
+    const trasClick = [...document.querySelectorAll("#variantModeGrid .storeTypeOption")];
+    ok("Al elegir un modo solo queda ese marcado",
+        trasClick[3].classList.contains("selected") &&
+        trasClick.slice(0, 3).every(b => !b.classList.contains("selected")),
+        trasClick.map(b => b.dataset.variantMode + (b.classList.contains("selected") ? "*" : "")).join(","));
+
+    ok("El campo de stock se deshabilita cuando el stock sale de las tallas",
+        document.getElementById("nstock").disabled === true);
+    ok("Aparecen las casillas de las tallas configuradas",
+        document.querySelectorAll(".sizeCheck").length === 4,
+        `${document.querySelectorAll(".sizeCheck").length} casillas`);
 
 } catch (error) {
     fail("excepcion no controlada", error);

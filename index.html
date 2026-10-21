@@ -419,6 +419,15 @@
                 </select>
             </div>
 
+            <!-- Aviso de modo: avisa en qué acción estás y cómo salir -->
+            <div id="modeBanner" class="modeBanner hidden" role="status" aria-live="polite">
+                <span id="modeBannerIcon" class="modeBannerIcon" aria-hidden="true">🏷️</span>
+                <span id="modeBannerText" class="modeBannerText"></span>
+                <button id="modeCancelBt" class="modeCancelBt" type="button">
+                    Cancelar <kbd>Esc</kbd>
+                </button>
+            </div>
+
             <!-- Ruta de navegación de categorías (solo visible dentro de una categoría) -->
             <nav id="breadcrumb" class="breadcrumb hidden"></nav>
 
@@ -454,11 +463,25 @@
             </section>
 
             <section id="actionsBar" class="actions">
-                <ul>
-                    <li id="addProduct" class="opt" role="button" tabindex="0">Agregar producto</li>
-                    <li id="delProduct" class="opt" role="button" tabindex="0">Eliminar producto</li>
-                    <li id="changePrice" class="opt" role="button" tabindex="0">Cambiar precio</li>
-                </ul>
+
+                <!-- Agregar producto es la acción principal: fila completa -->
+                <button id="addProduct" class="actBtn actBtnPrimary actBtnWide" type="button">
+                    <span class="actIcon" aria-hidden="true">＋</span>
+                    Agregar producto
+                </button>
+
+                <div class="actionsRow">
+                    <button id="changePrice" class="actBtn actBtnGhost" type="button">
+                        <span class="actIcon" aria-hidden="true">🏷️</span>
+                        Cambiar precio
+                    </button>
+
+                    <button id="delProduct" class="actBtn actBtnDanger" type="button">
+                        <span class="actIcon" aria-hidden="true">🗑️</span>
+                        Eliminar producto
+                    </button>
+                </div>
+
             </section>
             <!-- cuenta -->
             <aside id="accumulatePanel" class="modal">

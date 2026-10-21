@@ -1,4 +1,4 @@
-# MenúStock
+﻿# MenúStock
 
 App para **vender y comprar productos**: gestión de inventario, categorías, reabastecimiento (restock) e historial de movimientos de stock.
 
@@ -135,7 +135,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre **51 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`.
+Cubre **77 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
 
 ---
 
@@ -228,10 +228,12 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | Se podía vender más stock del que había | Se valida **antes** de descontar; si no alcanza, la venta se cancela |
 | La reposición aplicaba la mitad si una fila estaba mal | Se validan todas las filas y solo después se aplica |
 | Perfiles viejos sin `products` reventaban la app | Guards al cargar cada campo del perfil |
-| La barra de acciones no era accesible con teclado | `role="button"` + `tabindex` + activación con Enter/Espacio |
-| Los `console.log` de debug spampeaban la consola | Eliminados |
-| La regla móvil del modal de reposición no aplicaba | Selector corregido (tenía menos especificidad que la base) |
-| `height: 70em` en el overlay | `height: 100%` |
+| La barra de acciones no era accesible con teclado | `<button>` reales con iconos y jerarquía visual |
+| No se veía en qué modo estabas (borrar / cambiar precio) | Aviso de modo, botón marcado, tarjetas resaltadas, `Esc` para salir |
+| El modo se quedaba pegado al cambiar de vista o perfil | Se cancela solo en ambos casos |
+| El formulario de alta salía recortado en una esquina | Tarjeta centrada de 800 px con rejilla de dos columnas |
+| Un `<header>` dentro del formulario heredaba la cabecera oxblood de la app | El selector `header` global se acotó a `#appRoot > header` |
+| La barra de acciones quedaba bajo el pliegue | La app ocupa el alto del viewport y la grilla se estira |
 | `prompt()`/`alert()`/`confirm()` nativos bloqueaban la pantalla | Capa de diálogos propios con validación en línea |
 
 ---
@@ -239,3 +241,4 @@ La entrada se valida con una expresión regular y se suma término a término: *
 ## Licencia
 
 MIT
+
