@@ -44,8 +44,10 @@ Las únicas palabras en inglés que quedan son identificadores técnicos que no 
 MenuStock/
 ├── index.html      # Estructura del DOM: landing + app + modales
 ├── assets/
-│   ├── logo-menustock.png   # Logo oficial (800×800)
-│   └── logo-menustock.svg   # Versión vectorial
+│   ├── logo.png                # Logo horizontal para la cabecera (1000×260)
+│   ├── logo.svg                # Su versión vectorial
+│   ├── logo-menustock.png      # Logo cuadrado para la portada (800×800)
+│   └── logo-menustock.svg      # Su versión vectorial
 ├── home.css        # Sistema visual completo (tokens en :root)
 ├── home.js         # Lógica de la app (un solo módulo)
 ├── dev-server.js   # Servidor estático para desarrollo local

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" width="1000" height="260" role="img" aria-label="MenúStock">
+  <title>MenúStock</title>
+
+  <!--
+    Variante horizontal para la cabecera.
+    Fondo transparente y tonos claros (marigold + crema) porque la
+    cabecera de la app es oxblood oscuro: el logo original, con su
+    fondo crema y el texto marrón, no se leería ahí.
+  -->
+  <g transform="translate(140 132) scale(0.62)">
+
+    <!-- Asa del carrito -->
+    <path d="M-205 -125 h52 l62 200"
+          fill="none"
+          stroke="#D68A34"
+          stroke-width="27"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Cesta -->
+    <path d="M-96 -32 h272 l-38 138 h-196 z" fill="#D68A34"/>
+
+    <!-- Listado de inventario dentro de la cesta -->
+    <g stroke="#5C1622" stroke-width="14" stroke-linecap="round" fill="none">
+      <path d="M-58 8 h22"/>
+      <path d="M-58 34 h22"/>
+      <path d="M-58 60 h22"/>
+      <path d="M-12 8 h132"/>
+      <path d="M-12 34 h132"/>
+      <path d="M-12 60 h92"/>
+    </g>
+
+    <!-- Ruedas -->
+    <circle cx="-38" cy="148" r="26" fill="#D68A34"/>
+    <circle cx="108" cy="148" r="26" fill="#D68A34"/>
+  </g>
+
+  <!-- Nombre de la marca -->
+  <text x="285"
+        y="180"
+        font-family="Fraunces, Georgia, 'Times New Roman', serif"
+        font-size="124"
+        font-weight="600"
+        letter-spacing="-3"
+        fill="#F7F1E5">MenúStock</text>
+</svg>

@@ -302,6 +302,8 @@ La pantalla de selección de perfiles (y el gate de contraseña) abren con la **
 
 El logo vive en `assets/logo-menustock.png` (800×800 px) y su versión vectorial en `assets/logo-menustock.svg`: fondo crema `#F7F1E5`, carrito en terracota `#B6502F` con la lista de inventario dentro, y el nombre "MenúStock" en marrón oscuro `#2A1B16` con Fraunces.
 
+Para la **cabecera** hay una variante aparte, `assets/logo.png` (1000×260 px, con `assets/logo.svg` como fuente): horizontal, con fondo transparente y en tonos claros (carrito marigold `#D68A34` y texto crema `#F7F1E5`). Es necesario porque la cabecera es oxblood oscuro: el logo con fondo crema y texto marrón no se leería ahí, y en vertical el nombre quedaría diminuto a 42 px de alto.
+
 La clase `.portada-splash` a pantalla completa (`min-height: 100vh`) sirve para una portada independiente; la variante `--compacta` reduce la altura para que la lista de perfiles quepa sin hacer scroll. El fondo de la pantalla de perfiles usa el mismo crema del logo, de modo que la unión entre la imagen y el fondo no se nota.
 
 ### 6.6 Perfiles y contraseñas

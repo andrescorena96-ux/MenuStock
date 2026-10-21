@@ -129,12 +129,23 @@ body {
     flex-wrap: wrap;
 }
 
-#appRoot > header h1 {
-    font-family: var(--font-display);
-    font-size: 1.6rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--white);
+/* La marca de la cabecera es el logo oficial, no texto */
+.nav-brand {
+    display: flex;
+    align-items: center;
+
+    flex-shrink: 0;
+
+    text-decoration: none;
+}
+
+.nav-logo-img {
+    height: 42px;
+    width: auto;
+
+    object-fit: contain;
+
+    display: block;
 }
 
 .restockBt {
@@ -253,6 +264,8 @@ body {
     gap: 0.45rem;
 
     min-width: 165px;
+
+    white-space: nowrap;
 }
 
 /* Los dos selectores van juntos para que no se partan en dos filas */
@@ -1932,8 +1945,8 @@ li:focus-visible {
         padding: 0.9rem 1rem;
     }
 
-    #appRoot > header h1 {
-        font-size: 1.25rem;
+    .nav-logo-img {
+        height: 30px;
     }
 
     .restockBt {
