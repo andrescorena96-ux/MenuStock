@@ -434,9 +434,9 @@ try {
 
     await openCardMenu(0);
     const menuAbierto = document.querySelectorAll(".productCard")[0].querySelector(".cardMenu");
-    ok("El menu ⋮ se abre con las tres acciones",
+    ok("El menu ⋮ se abre con las cuatro acciones",
         !menuAbierto.hidden &&
-        menuAbierto.querySelectorAll(".cardMenuItem").length === 3,
+        menuAbierto.querySelectorAll(".cardMenuItem").length === 4,
         [...menuAbierto.querySelectorAll(".cardMenuItem")].map(b => b.textContent.trim()).join(" | "));
 
     // Clic fuera cierra el menu
@@ -792,6 +792,211 @@ try {
     await new Promise(r => setTimeout(r, 100));
 
     // =========================================================
+    // STOCK MÍNIMO, ESTADOS Y MARGEN
+    // =========================================================
+    // Un producto con stock 2 y mínimo 5 es CRÍTICO (rojo).
+    click("#addProduct");
+    await waitFor(() => document.getElementById("newName") !== null);
+    setValue("#newName", "Producto Critico");
+    setValue("#nprice", "1000");
+    setValue("#nstock", "2");
+    setValue("#nminstock", "5");
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    const tarjetaCritico = [...document.querySelectorAll(".productCard")]
+        .find(c => c.querySelector("h3").textContent === "Producto Critico");
+    ok("Un producto por debajo del minimo sale en estado critico",
+        tarjetaCritico.querySelector(".stockLine").classList.contains("stockLine--critico"),
+        tarjetaCritico.querySelector(".stockLine").className);
+
+    // Con mínimo 8 y stock 10 no llega a 1.5x (12): sale "por reponer".
+    click("#addProduct");
+    await waitFor(() => document.getElementById("newName") !== null);
+    setValue("#newName", "Producto Reorden");
+    setValue("#nprice", "1000");
+    setValue("#nstock", "10");
+    setValue("#nminstock", "8");
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    const tarjetaReorden = [...document.querySelectorAll(".productCard")]
+        .find(c => c.querySelector("h3").textContent === "Producto Reorden");
+    ok("Un producto cerca del minimo sale por reponer",
+        tarjetaReorden.querySelector(".stockLine").classList.contains("stockLine--reorden"),
+        tarjetaReorden.querySelector(".stockLine").className);
+
+    // Filtro por estado
+    const selEstado = document.getElementById("searchState");
+    selEstado.value = "critico";
+    selEstado.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 120));
+
+    const enCritico = [...document.querySelectorAll(".productCard")]
+        .filter(c => c.querySelector(".stockLine--critico"));
+    const nombresCriticos = enCritico.map(c => c.querySelector("h3").textContent);
+    ok("El filtro por estado muestra solo los criticos",
+        enCritico.length > 0 &&
+        nombresCriticos.includes("Producto Critico") &&
+        !nombresCriticos.includes("Producto Reorden"),
+        nombresCriticos.join(", "));
+
+    selEstado.value = "todos";
+    selEstado.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 120));
+
+    // =========================================================
+    // MERMAS Y DESperdICIOS
+    // =========================================================
+    const stockAntesDeMerma = 2;
+    await clickCardAction("merma", [...document.querySelectorAll(".productCard")]
+        .findIndex(c => c.querySelector("h3").textContent === "Producto Critico"));
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("mermaQty") !== null
+    );
+    ok("El menu ⋮ ofrece registrar merma",
+        document.getElementById("mermaQty") !== null);
+
+    document.getElementById("mermaQty").value = "1";
+    document.getElementById("mermaReason").value = "caducidad";
+    document.querySelectorAll("#dialogActions button")[1].click();
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Merma")
+    );
+    await acceptDialog();
+
+    const trasMerma = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda").products
+        .find(p => p.name === "Producto Critico");
+    ok("La merma descuenta el stock",
+        trasMerma.quantity === stockAntesDeMerma - 1,
+        `stock = ${trasMerma.quantity}`);
+    ok("La merma queda registrada en el historial",
+        trasMerma && JSON.parse(localStorage.getItem("menuStockUsers"))
+            .find(u => u.profile.name === "Mi Tienda").stockHistory
+            .some(m => m.action === "merma" && m.change === -1));
+
+    // =========================================================
+    // ESCANDALLO: RECETAS
+    // =========================================================
+    // Se crea un insumo y una receta que lo usa.
+    click("#addProduct");
+    await waitFor(() => document.getElementById("newName") !== null);
+    setValue("#newName", "Carne Molida");
+    setValue("#nprice", "0");
+    setValue("#nstock", "1000");
+    setValue("#nunit", "g");
+    setValue("#ncosto", "0.02");
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    click("#addProduct");
+    await waitFor(() => document.getElementById("newName") !== null);
+    setValue("#newName", "Hamburguesa Clasica");
+    setValue("#nprice", "25");
+    setValue("#nstock", "0");
+
+    const chkReceta = document.getElementById("nisreceta");
+    chkReceta.click();
+    await new Promise(r => setTimeout(r, 120));
+    ok("El formulario tiene el bloque de recetas",
+        !document.getElementById("recipeEditor").classList.contains("hidden"));
+
+    document.getElementById("addRecipeLineBt").click();
+    await new Promise(r => setTimeout(r, 120));
+
+    const lineaReceta = document.querySelector(".recipeLine");
+    ok("Se puede agregar un ingrediente a la receta",
+        lineaReceta !== null);
+
+    if (lineaReceta) {
+        const select = lineaReceta.querySelector(".recipeProduct");
+        const opcionCarne = [...select.options].find(o => o.textContent.includes("Carne Molida"));
+        select.value = opcionCarne.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise(r => setTimeout(r, 120));
+
+        const fila = document.querySelector(".recipeLine");
+        fila.querySelector(".recipeQty").value = "200";
+        fila.querySelector(".recipeQty").dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise(r => setTimeout(r, 120));
+
+        ok("El costo de la receta se calcula",
+            document.getElementById("recipeCostValue").textContent.includes("4.00"),
+            document.getElementById("recipeCostValue").textContent);
+    }
+
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    const conReceta = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda").products
+        .find(p => p.name === "Hamburguesa Clasica");
+
+    ok("El producto se guarda como receta",
+        conReceta.esReceta === true && conReceta.ingredientes.length === 1,
+        JSON.stringify(conReceta.ingredientes));
+    ok("El costo unitario del insumo se guarda",
+        JSON.parse(localStorage.getItem("menuStockUsers"))
+            .find(u => u.profile.name === "Mi Tienda").products
+            .find(p => p.name === "Carne Molida").costoUnitario === 0.02);
+
+    // El stock de la receta sale de los insumos: 1000g / 200g = 5 unidades
+    const tarjetaReceta = [...document.querySelectorAll(".productCard")]
+        .find(c => c.querySelector("h3").textContent === "Hamburguesa Clasica");
+    ok("El stock de la receta se calcula con los insumos",
+        tarjetaReceta.querySelector(".stockLine").textContent.includes("5"),
+        tarjetaReceta.querySelector(".stockLine").textContent.trim());
+
+    // =========================================================
+    // PROVEEDORES Y PEDIDO DE REPOSICIÓN
+    // =========================================================
+    click("#purchasesBt");
+    await new Promise(r => setTimeout(r, 120));
+
+    click("#suppliersBt");
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Proveedores")
+    );
+
+    const botonesDialogo = document.querySelectorAll("#dialogActions button");
+    botonesDialogo[botonesDialogo.length - 1].click();
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Nuevo proveedor")
+    );
+    document.getElementById("dialogInput").value = "Distribuidora Don Pepe";
+    document.querySelectorAll("#dialogActions button")[1].click();
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Teléfono")
+    );
+    document.getElementById("dialogInput").value = "300 123 4567";
+    document.querySelectorAll("#dialogActions button")[1].click();
+
+    await new Promise(r => setTimeout(r, 200));
+    const proveedoresCreados = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda").proveedores;
+    ok("Se puede crear un proveedor",
+        proveedoresCreados.length === 1 &&
+        proveedoresCreados[0].name === "Distribuidora Don Pepe" &&
+        proveedoresCreados[0].phone === "300 123 4567",
+        JSON.stringify(proveedoresCreados));
+
+    // El pedido de reposición
+    click("#orderReorderBt");
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Pedido")
+    );
+    ok("El pedido de reposicion se genera",
+        document.querySelector(".orderText") !== null,
+        document.querySelector(".orderText") ? document.querySelector(".orderText").textContent.slice(0, 60) : "sin texto");
+    document.querySelectorAll("#dialogActions button")[0].click();
+    await new Promise(r => setTimeout(r, 150));
+
+    // =========================================================
     // MODULO DE COMPRAS A PROVEEDORES
     // =========================================================
     click("#purchasesBt");
@@ -989,8 +1194,8 @@ try {
         document.querySelector(".productFormModal") !== null &&
         document.querySelector(".modal.show") === null);
     ok("Los campos del formulario van en una rejilla",
-        document.querySelectorAll(".productFormGrid input").length === 4 &&
-        document.querySelectorAll(".productFormGrid select").length === 2,
+        document.querySelectorAll(".productFormGrid input").length === 6 &&
+        document.querySelectorAll(".productFormGrid select").length === 4,
         `${document.querySelectorAll(".productFormGrid input").length} inputs, ${document.querySelectorAll(".productFormGrid select").length} selects`);
     ok("El titulo del formulario encabeza la pantalla",
         document.getElementById("modalTitle").textContent.includes("Agrega un nuevo producto"),

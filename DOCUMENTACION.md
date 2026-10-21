@@ -166,6 +166,33 @@ El botón de perfil abre un menú con: *Cambiar perfil*, *Cambiar nombre*, *Expo
 
 ## 6. Funcionalidades, en detalle
 
+### 6.0 Control del inventario: mínimos, mermas y recetas
+
+Cuatro cosas que un dueño de tienda necesita y que antes no existían.
+
+**Stock mínimo y estado.** Cada producto puede tener un **stock mínimo**: el nivel por debajo del cual hay que reponer. A partir de él la app calcula un estado de tres niveles:
+
+| Estado | Cuándo | Color |
+|---|---|---|
+| **En stock** | hay más que el mínimo | 🟢 verde |
+| **Por reponer** | entre el mínimo y 1,5× el mínimo | 🟡 amarillo |
+| **Crítico** | por debajo del mínimo, o agotado | 🔴 rojo |
+
+El estado se ve en la tarjeta (punto de color + etiqueta) y hay un **filtro por estado** en el panel de búsqueda para ver solo lo crítico.
+
+**Mermas y desperdicios.** El menú ⋮ de la tarjeta tiene **Registrar merma**: se descuenta stock sin que haya venta, con un motivo (daño, caducidad, error de preparación, merma de cocina u otro). Queda registrado en el historial como movimiento `merma`, así que se puede saber dónde se está perdiendo el inventario.
+
+**Unidades de medida.** Cada producto lleva su unidad: unidades, kg, g, L, ml, cajas o paquetes. Se muestra junto al stock y en el formulario de merma.
+
+**Costo de compra y margen.** Cada producto puede llevar su **costo unitario de compra**. Con el precio de venta, la app calcula el **margen** y lo muestra en la tarjeta: verde si es ≥ 30 %, amarillo si ≥ 10 %, rojo por debajo.
+
+**Escandallo (recetas).** Un producto puede ser un **preparado** armado con insumos del inventario:
+
+- Se marca *"Es una receta"* en el formulario y se eligen los ingredientes con su cantidad.
+- **El stock de la receta se calcula**: si la receta lleva 200 g de carne y hay 1 000 g, se pueden preparar 5 hamburguesas.
+- **Al venderla se descuentan los insumos** automáticamente, cada uno con su movimiento en el historial.
+- El costo de la receta (y su margen) se calculan con los costos de los insumos.
+
 ### 6.1 Barra de acciones
 
 La barra inferior es **mínima**: una sola acción, en una tira delgada sin el bloque vinotinto gigante de antes.
@@ -318,7 +345,16 @@ Ninguno      · -3       →  descuenta 3 unidades (sin conversión)
 - **Preferencia de empaque por producto**: se recuerda el empaque usado la última vez.
 - **Validación en dos pasos**: primero se revisan todas las filas y solo después se aplica nada. Antes se modificaba sobre la marcha y una fila inválida dejaba la mitad del cambio aplicada.
 
-### 6.10 Compras a proveedores
+### 6.10 Proveedores y pedido de reposición
+
+En la vista **Compras** hay dos botones nuevos:
+
+- **Proveedores** — abre el directorio. Se crean, renombran y eliminan; cada uno puede tener teléfono. Los productos se asignan a un proveedor desde el formulario (campo *Proveedor*). Si borras un proveedor, sus productos quedan sin proveedor en vez de desaparecer.
+- **Generar pedido** — arma el pedido de reposición con lo que está por debajo del mínimo, **agrupado por proveedor**, y lo entrega como texto listo para copiar y mandar por WhatsApp o email. Al copiar se copia el texto; si el navegador no deja usar el portapapeles, el texto queda seleccionado para copiarlo a mano.
+
+El botón **+ Generar compra con estos** de la lista de reorden abre directamente el formulario de compra con los productos que hay que reponer y la cantidad sugerida para dejar el stock por encima del mínimo.
+
+### 6.11 Compras a proveedores
 
 El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta.
 
@@ -328,7 +364,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Detalle**: cada compra se puede abrir en un diálogo con su fecha, sus renglones y su total.
 - **Anular**: devuelve el stock y deja un movimiento `purchaseVoid`. La compra **no se borra** — queda marcada como anulada, para no perder la trazabilidad.
 
-### 6.11 Cuenta y venta
+### 6.12 Cuenta y venta
 
 - Se arma haciendo clic en las tarjetas de producto.
 - El panel inferior (panel de cuenta) muestra cada renglón con cantidad, precio y subtotal, más el total general.
@@ -337,7 +373,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Validación de stock antes de cobrar**: si no hay unidades suficientes, la venta se cancela y se dice exactamente qué producto falta y cuántas unidades. El inventario nunca queda en negativo.
 - El historial de ventas guarda renglones estructurados (`id`, `nombre`, `precio`, `cantidad`), total y fecha.
 
-### 6.12 Historial de inventario
+### 6.13 Historial de inventario
 
 Registro cronológico de **todo** movimiento de stock, del más reciente al más antiguo.
 
@@ -357,7 +393,7 @@ El historial **no inventa el pasado**: el stock que ya existía antes de activar
 
 Se conservan hasta **1.000 movimientos** por perfil, y los más antiguos se descartan para que `localStorage` no crezca sin límite.
 
-### 6.13 Tienda de ropa: variantes
+### 6.14 Tienda de ropa: variantes
 
 Un producto de ropa puede manejarse de cuatro maneras:
 
@@ -370,7 +406,7 @@ Un producto de ropa puede manejarse de cuatro maneras:
 
 El stock total del producto es la suma de sus variantes. La tarjeta muestra un resumen (`Tallas: S, M, L · Colores: Negro, Blanco`).
 
-### 6.14 Exportar e importar datos
+### 6.15 Exportar e importar datos
 
 Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el inventario.
 
@@ -378,7 +414,7 @@ Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el 
 - **Importar** → reemplaza los datos del perfil actual con los del archivo, previa confirmación.
 - **La contraseña nunca se exporta ni se importa**: es un secreto y debe quedarse solo en el dispositivo.
 
-### 6.15 Sistema de diálogos
+### 6.16 Sistema de diálogos
 
 La app **no usa `prompt()`, `alert()` ni `confirm()` nativos**: bloquean la pantalla, no admiten formato y rompen el diseño. Hay una capa propia con tres funciones que son promesas:
 
@@ -392,7 +428,7 @@ await showPrompt({ title, label, validate });   // pedir un dato -> string o nul
 
 Se cierran con **Escape** o haciendo clic en el fondo. El foco va solo al primer campo. Los diálogos de confirmación destructiva se pintan en color de peligro.
 
-### 6.16 Landing page
+### 6.17 Landing page
 
 Ocho secciones: hero, sobre nosotros, misión, historia, lo que ofrece, pensado para tu negocio, transición y mensaje final.
 
@@ -503,7 +539,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-**108 casos**, todos en verde:
+**122 casos**, todos en verde:
 
 - Arranque: carga del módulo, perfiles por defecto, landing, entrada a la app
 - Sistema de diálogos: apertura, validación que impide confirmar un valor vacío, encadenado de diálogos

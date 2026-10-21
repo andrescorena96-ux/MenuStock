@@ -145,7 +145,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre **108 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
+Cubre **122 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye la barra con menú por tarjeta, el formulario de alta a pantalla completa, los estados de stock, las mermas, el escandallo y los proveedores.
 
 ---
 
@@ -211,6 +211,12 @@ La entrada se valida con una expresión regular y se suma término a término: *
 - [x] Editar productos (incluida categoría y subcategoría)
 - [x] Menú de acciones por tarjeta (⋮) y barra flotante para varios
 - [x] Formulario de alta de perfil con color y contraseña opcional
+- [x] **Stock mínimo** por producto con estados 🟢🟡🔴 y filtro por estado
+- [x] **Mermas y desperdicios** (daño, caducidad, error de cocina) con motivo
+- [x] **Unidades de medida** (und, kg, g, L, ml, cajas, paquetes)
+- [x] **Costo de compra y margen** calculados en cada tarjeta
+- [x] **Escandallo**: recetas que descuentan sus insumos al venderse
+- [x] **Directorio de proveedores** y generador de pedido para WhatsApp
 - [x] **Compras a proveedores** (entrada de stock, con anulación)
 - [x] Exportar / importar datos (respaldo en JSON)
 - [ ] Carrito y pedido del cliente final
@@ -251,6 +257,7 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | No había forma de actuar sobre varios productos | Casilla por tarjeta + barra flotante de acciones múltiples |
 | Dos productos con la misma inicial podían quedar con el MISMO id | El id lleva un fragmento de UUID: siempre es único |
 | Crear perfil pedía nombre y contraseña en diálogos sueltos | Formulario propio con nombre, negocio, color y contraseña opcional |
+| Merma, cambio de precio y borrado no se guardaban | `saveCurrentUser()` en las tres acciones del menú ⋮ |
 | Al guardar se perdia la busqueda activa | efreshProducts() pasa por el filtro de busqueda |
 | Una lista vacia dejaba el espacio en blanco | Estado vacio que explica por que no hay productos |
 | Editar un producto y mudarlo de categoria lo hacia desaparecer | El aviso dice donde quedo y ofrece ir a esa categoria |

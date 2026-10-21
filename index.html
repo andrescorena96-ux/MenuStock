@@ -410,13 +410,23 @@
                     <label for="invSearch">Busca en el inventario:</label>
                     <input class="inventorySearch inp" type="search" id="invSearch" placeholder="Escribe palabras clave...">
                 </search>
-                <label for="searchBy">Buscar por:</label>
-                <select class="inp" name="searchBy" id="searchBy">
-                    <option id="filterByName" value="name">Nombre</option>
-                    <option id="filterByMaxPrice" value="maxPrice">Precio máximo</option>
-                    <option id="filterByMinPrice" value="minPrice">Precio mínimo</option>
-                    <option id="filterByStock" value="quantity">Cantidad en stock</option>
-                </select>
+                <div class="searchFilters">
+                    <label for="searchBy">Buscar por:</label>
+                    <select class="inp" name="searchBy" id="searchBy">
+                        <option id="filterByName" value="name">Nombre</option>
+                        <option id="filterByMaxPrice" value="maxPrice">Precio máximo</option>
+                        <option id="filterByMinPrice" value="minPrice">Precio mínimo</option>
+                        <option id="filterByStock" value="quantity">Cantidad en stock</option>
+                    </select>
+
+                    <label for="searchState">Estado:</label>
+                    <select class="inp" name="searchState" id="searchState">
+                        <option value="todos">Todos</option>
+                        <option value="ok">En stock</option>
+                        <option value="reorden">Por reponer</option>
+                        <option value="critico">Crítico</option>
+                    </select>
+                </div>
             </div>
 
 
@@ -442,7 +452,11 @@
             <section id="purchasesView" class="purchasesView hidden">
                 <div class="categoriesHeader">
                     <h2>Compras a proveedores</h2>
-                    <button id="newPurchaseBt" class="newCategoryBt" type="button">+ Nueva compra</button>
+                    <div class="headerActions">
+                        <button id="suppliersBt" class="newCategoryBt" type="button">Proveedores</button>
+                        <button id="orderReorderBt" class="newCategoryBt" type="button">Generar pedido</button>
+                        <button id="newPurchaseBt" class="newCategoryBt" type="button">+ Nueva compra</button>
+                    </div>
                 </div>
 
                 <p class="purchasesHint">

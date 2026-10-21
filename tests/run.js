@@ -109,11 +109,25 @@ function extractResults(dom) {
         process.exit(1);
     }
 
-    const server = await startServer();
-    console.log(`Servidor de pruebas en http://localhost:${PORT}\n`);
+    // Con --url=<sitio> se corre la suite contra un sitio ya publicado
+    // en vez de levantar el servidor local.
+    const argUrl = process.argv.find(a => a.startsWith("--url="));
+    const baseUrl = argUrl ? argUrl.slice(6).replace(/\/$/, "") : null;
 
-    const dom = await runHeadless(browser, `http://localhost:${PORT}/tests/e2e.html?ejecutar`);
-    server.close();
+    let server = null;
+    if (baseUrl) {
+        console.log(`Probando contra ${baseUrl}\n`);
+    } else {
+        server = await startServer();
+        console.log(`Servidor de pruebas en http://localhost:${PORT}\n`);
+    }
+
+    const target = baseUrl
+        ? `${baseUrl}/tests/e2e.html?ejecutar`
+        : `http://localhost:${PORT}/tests/e2e.html?ejecutar`;
+
+    const dom = await runHeadless(browser, target);
+    if (server) server.close();
 
     const results = extractResults(dom);
 

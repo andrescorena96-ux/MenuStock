@@ -97,6 +97,8 @@ const dialogBackdrop = document.getElementById("dialogBackdrop");
 
 // Compras a proveedores
 const purchasesBt = document.getElementById("purchasesBt");
+const suppliersBt = document.getElementById("suppliersBt");
+const orderReorderBt = document.getElementById("orderReorderBt");
 const purchasesView = document.getElementById("purchasesView");
 const purchasesList = document.getElementById("purchasesList");
 const newPurchaseBt = document.getElementById("newPurchaseBt");
@@ -119,6 +121,7 @@ let currentUser = null;
 // NUEVO
 let stockHistory = [];   // movimientos de inventario
 let categories = [];     // [{ id, name, subcategories: [{ id, name }] }]
+let proveedores = [];    // [{ id, name, phone, note }]
 let purchases = [];      // compras a proveedores: [{ id, fecha, proveedor, items, total, anulada }]
 let clothingConfig = null; // { sizeSystem, sizeList } — solo si storeType === "clothing"
 
@@ -412,6 +415,164 @@ let pendingLoginUserId = null;
 // Producto que se está editando en el formulario. null = alta nueva.
 let editingProduct = null;
 
+// Unidades de medida disponibles para un producto
+const UNITS = [
+    { id: "und",  label: "Unidades (und)" },
+    { id: "kg",   label: "Kilogramos (kg)" },
+    { id: "g",    label: "Gramos (g)" },
+    { id: "L",    label: "Litros (L)" },
+    { id: "ml",   label: "Mililitros (ml)" },
+    { id: "caja", label: "Cajas" },
+    { id: "paq",  label: "Paquetes" }
+];
+
+// Etiqueta corta de la unidad de un producto
+function unitLabel(product) {
+    const id = product && product.unit ? product.unit : "und";
+    const found = UNITS.find(u => u.id === id);
+    return found ? found.id : "und";
+}
+
+/**
+ * Nivel de alerta del stock de un producto.
+ *
+ *   ok      -> hay stock de sobra           (verde)
+ *   reorden -> toca reponer pronto         (amarillo)
+ *   critico -> llegó al mínimo o se agotó  (rojo)
+ *
+ * Los umbrales vienen del stock mínimo que puso el dueño:
+ * crítico por debajo del mínimo, reorden hasta una vez y media el mínimo.
+ */
+function stockLevel(product, cantidadAlternativa = null) {
+    const cantidad = cantidadAlternativa !== null
+        ? cantidadAlternativa
+        : (Number(product && product.quantity) || 0);
+    const minimo = Number(product && product.minStock) || 0;
+
+    if (cantidad <= 0) return "critico";
+    if (minimo <= 0) return "ok";
+    if (cantidad <= minimo) return "critico";
+    if (cantidad <= minimo * 1.5) return "reorden";
+    return "ok";
+}
+
+const STOCK_LEVELS = {
+    ok:      { label: "En stock" },
+    reorden: { label: "Por reponer" },
+    critico: { label: "Crítico" }
+};
+
+// Productos que hay que reponer ya
+function productsToReorder() {
+    return products.filter(p => {
+        const nivel = stockLevel(p);
+        return nivel === "critico" || nivel === "reorden";
+    });
+}
+
+// Cuánto sugerir en un pedido para dejar el producto por encima del mínimo
+function suggestedOrderQuantity(product) {
+    const minimo = Number(product.minStock) || 0;
+    const actual = Number(product.quantity) || 0;
+    if (minimo <= 0) return 1;
+    return Math.max(1, Math.min(minimo * 2 - actual, minimo * 2));
+}
+
+
+/* ============================================================
+   5f. RECETAS (ESCANDALLO) Y COSTOS
+   Un producto puede ser un preparado: en vez de tener stock propio
+   se arma con insumos del inventario. Al venderlo se descuentan
+   los insumos y su stock se calcula a partir de ellos.
+   ============================================================ */
+
+// Cuánto cuesta un producto: si es receta, la suma de sus insumos
+function costoDeProducto(product) {
+    if (!product) return 0;
+
+    if (product.esReceta && Array.isArray(product.ingredientes)) {
+        return product.ingredientes.reduce((suma, ing) => {
+            const insumo = products.find(p => p.id === ing.productId);
+            if (!insumo) return suma;
+            return suma + (Number(insumo.costoUnitario) || 0) * (Number(ing.cantidad) || 0);
+        }, 0);
+    }
+
+    return Number(product.costoUnitario) || 0;
+}
+
+// Margen de ganancia en porcentaje (null si no hay precio de venta)
+function margenDeProducto(product) {
+    const precio = Number(product && product.price) || 0;
+    if (precio <= 0) return null;
+
+    const costo = costoDeProducto(product);
+    return ((precio - costo) / precio) * 100;
+}
+
+// Stock real de un producto. En una receta se calcula con lo que
+// hay de cada insumo: cuantas unidades se podrían preparar.
+function stockDeProducto(product) {
+    if (!product) return 0;
+
+    if (!product.esReceta) return Number(product.quantity) || 0;
+
+    const ingredientes = Array.isArray(product.ingredientes) ? product.ingredientes : [];
+    if (ingredientes.length === 0) return 0;
+
+    let unidades = Infinity;
+    for (const ing of ingredientes) {
+        const insumo = products.find(p => p.id === ing.productId);
+        if (!insumo) return 0;
+
+        const porIngrediente = (Number(insumo.quantity) || 0) / (Number(ing.cantidad) || 1);
+        unidades = Math.min(unidades, porIngrediente);
+    }
+
+    return Number.isFinite(unidades) ? Math.floor(unidades) : 0;
+}
+
+// Descontar una venta. Si el producto es receta, se descuentan
+// sus insumos; si no, se descuenta su propio stock.
+function descontarPorVenta(product, cantidad) {
+    if (!product.esReceta) {
+        product.quantity -= cantidad;
+        recordStockChange(product, "sale", -cantidad, `Venta · ${cantidad} u.`);
+        return;
+    }
+
+    for (const ing of product.ingredientes || []) {
+        const insumo = products.find(p => p.id === ing.productId);
+        if (!insumo) continue;
+
+        const total = (Number(ing.cantidad) || 0) * cantidad;
+        insumo.quantity -= total;
+        recordStockChange(insumo, "sale", -total, `Venta de ${product.name}`);
+    }
+}
+
+// Texto listo para enviar por WhatsApp al proveedor
+function pedidoEnTexto(proveedor, lista) {
+    const lineas = lista.map(p => {
+        const sugerido = suggestedOrderQuantity(p);
+        const unidad = unitLabel(p);
+        const minimo = Number(p.minStock) || 0;
+        return `• ${p.name} — pido ${sugerido} ${unidad}` +
+            (minimo > 0 ? ` (tengo ${p.quantity}, mínimo ${minimo})` : ` (tengo ${p.quantity})`);
+    });
+
+    const total = lista.reduce((suma, p) => suma + suggestedOrderQuantity(p), 0);
+
+    return [
+        `Pedido para ${proveedor.nombre}`,
+        proveedor.telefono ? `Tel: ${proveedor.telefono}` : "",
+        "",
+        ...lineas,
+        "",
+        `Unidades en total: ${total}`
+    ].filter(linea => linea !== undefined).join("\n");
+}
+
 function storeTypeInfo(storeTypeId) {
     return STORE_TYPES.find(type => type.id === storeTypeId) || STORE_TYPES[STORE_TYPES.length - 1];
 }
@@ -435,7 +596,8 @@ const ACTION_LABELS = {
     sale: "Venta",
     deleted: "Producto eliminado",
     purchase: "Compra a proveedor",
-    purchaseVoid: "Compra anulada"
+    purchaseVoid: "Compra anulada",
+    merma: "Merma"
 };
 
 
@@ -520,6 +682,7 @@ function saveCurrentUser() {
     currentUser.categories = categories;
     currentUser.clothingConfig = clothingConfig;
     currentUser.purchases = purchases;
+    currentUser.proveedores = proveedores;
 
     const users = getUsers();
     const index = users.findIndex(user => user.id === currentUser.id);
@@ -557,7 +720,8 @@ function createDefaultUsers() {
             historial: [],
             stockHistory: [],
             categories: [],
-            purchases: []
+            purchases: [],
+            proveedores: []
         },
         {
             id: crypto.randomUUID(),
@@ -570,7 +734,8 @@ function createDefaultUsers() {
             historial: [],
             stockHistory: [],
             categories: [],
-            purchases: []
+            purchases: [],
+            proveedores: []
         }
     ];
 
@@ -887,11 +1052,18 @@ function selectProfile(userId) {
     categories = currentUser.categories;
     clothingConfig = currentUser.clothingConfig;
     purchases = Array.isArray(currentUser.purchases) ? currentUser.purchases : [];
+    proveedores = Array.isArray(currentUser.proveedores) ? currentUser.proveedores : [];
 
     // Los productos viejos simplemente quedan sin categoría.
     for (let product of products) {
         if (!("category" in product)) product.category = null;
         if (!("subcategory" in product)) product.subcategory = null;
+        if (!("minStock" in product)) product.minStock = 0;
+        if (!("unit" in product)) product.unit = "und";
+        if (!("costoUnitario" in product)) product.costoUnitario = 0;
+        if (!("proveedorId" in product)) product.proveedorId = null;
+        if (!("esReceta" in product)) product.esReceta = false;
+        if (!("ingredientes" in product)) product.ingredientes = [];
     }
 
     console.info("Perfil seleccionado:", currentUser.profile.name);
@@ -1088,7 +1260,8 @@ async function finishProfileCreation() {
         historial: [],
         stockHistory: [],
         categories: selectedStoreType === "clothing" ? buildDefaultClothingCategories() : [],
-        purchases: []
+        purchases: [],
+        proveedores: []
     };
 
     users.push(newUser);
@@ -1406,6 +1579,10 @@ async function handleCardAction(action, card) {
         await changeProductPrice([product]);
         return;
     }
+    if (action === "merma") {
+        await registrarMerma(product);
+        return;
+    }
     if (action === "delete") {
         await deleteProducts([product]);
     }
@@ -1441,6 +1618,7 @@ async function changeProductPrice(lista) {
 
     refreshProducts();
     updateSelection();
+    saveCurrentUser();
 
     await showAlert({
         title: "Precio actualizado",
@@ -1478,12 +1656,335 @@ async function deleteProducts(lista) {
 
     clearSelection();
     refreshProducts();
+    saveCurrentUser();
 
     await showAlert({
         title: "Eliminado",
         message: lista.length === 1
             ? `Se eliminó «${lista[0].name}».`
             : `Se eliminaron ${lista.length} productos.`
+    });
+}
+
+// Motivos habituales de merma
+const MERMA_REASONS = [
+    { id: "daño",      label: "Daño o rotura" },
+    { id: "caducidad", label: "Caducidad" },
+    { id: "preparación", label: "Error de preparación" },
+    { id: "cocina",    label: "Merma de cocina" },
+    { id: "otro",      label: "Otro" }
+];
+
+// Registrar una merma: el stock se pierde sin que haya venta.
+async function registrarMerma(product) {
+    const unidad = unitLabel(product);
+
+    const datos = await new Promise(resolve => {
+        dialogResolve = resolve;
+
+        openDialog({
+            title: "Registrar merma",
+            bodyHtml: `
+                <p class="dialogHint">
+                    Se descuenta del inventario y queda registrado en el historial.
+                    No cuenta como venta.
+                </p>
+
+                <div class="profileFormRow">
+                    <label class="profileFormLabel" for="mermaQty">
+                        Cantidad perdida (${escapeHtml(unidad)})
+                    </label>
+                    <input id="mermaQty" class="dialogInput" type="number" min="1"
+                           step="1" placeholder="Ej: 3">
+                    <p class="dialogHint">
+                        Hay ${escapeHtml(product.quantity)} ${escapeHtml(unidad)} en stock.
+                    </p>
+                </div>
+
+                <div class="profileFormRow">
+                    <label class="profileFormLabel" for="mermaReason">Motivo</label>
+                    <select id="mermaReason" class="dialogInput">
+                        ${MERMA_REASONS.map(r => `
+                            <option value="${r.id}">${r.label}</option>
+                        `).join("")}
+                    </select>
+                </div>
+
+                <p id="mermaError" class="dialogError"></p>
+            `,
+            actions: [
+                { label: "Cancelar", variant: "cancel", value: null },
+                {
+                    label: "Registrar merma",
+                    onClick: (body) => {
+                        const cantidad = Number(body.querySelector("#mermaQty").value);
+                        const motivoId = body.querySelector("#mermaReason").value;
+
+                        if (!Number.isFinite(cantidad) || cantidad <= 0) {
+                            body.querySelector("#mermaError").textContent =
+                                "Escribe una cantidad mayor que cero.";
+                            body.querySelector("#mermaQty").focus();
+                            return false;
+                        }
+
+                        if (cantidad > product.quantity) {
+                            body.querySelector("#mermaError").textContent =
+                                `Solo hay ${product.quantity} ${unidad} en stock.`;
+                            body.querySelector("#mermaQty").focus();
+                            return false;
+                        }
+
+                        const motivo = MERMA_REASONS.find(r => r.id === motivoId);
+                        return { cantidad, motivo: motivo ? motivo.label : "Merma" };
+                    }
+                }
+            ],
+            onOpen: (body) => {
+                const input = body.querySelector("#mermaQty");
+                input.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        const buttons = dialogActions.querySelectorAll("button");
+                        buttons[buttons.length - 1].click();
+                    }
+                });
+                input.focus();
+            }
+        });
+    });
+
+    if (!datos) return;
+
+    product.quantity -= datos.cantidad;
+    recordStockChange(product, "merma", -datos.cantidad, datos.motivo);
+
+    refreshProducts();
+    updateSelection();
+    saveCurrentUser();
+
+    await showAlert({
+        title: "Merma registrada",
+        message:
+            `Se descontaron ${datos.cantidad} ${unidad} de «${product.name}» ` +
+            `(${datos.motivo}). Quedan ${product.quantity}.`
+    });
+}
+
+/* ============================================================
+   5g. PROVEEDORES
+   Un directorio por perfil. Cada producto puede apuntar a uno.
+   Los productos que hay que reponer se agrupan por proveedor y
+   sale un pedido en texto, listo para mandar por WhatsApp.
+   ============================================================ */
+
+function showSuppliersPanel() {
+    const lista = proveedores.map(pv => `
+        <div class="supplierRow" data-id="${escapeHtml(pv.id)}">
+            <div class="supplierInfo">
+                <strong>${escapeHtml(pv.name)}</strong>
+                ${pv.phone ? `<span>${escapeHtml(pv.phone)}</span>` : ""}
+                ${pv.note ? `<span class="supplierNote">${escapeHtml(pv.note)}</span>` : ""}
+            </div>
+            <div class="supplierActions">
+                <button class="catBt" data-edit-supplier="${escapeHtml(pv.id)}" type="button">Renombrar</button>
+                <button class="catBt danger" data-delete-supplier="${escapeHtml(pv.id)}" type="button">Eliminar</button>
+            </div>
+        </div>
+    `).join("");
+
+    openDialog({
+        title: "Proveedores",
+        wide: true,
+        bodyHtml: `
+            <div class="supplierList">
+                ${lista || `
+                    <p class="dialogHint">
+                        Todavía no hay proveedores. Crea el primero para poder
+                        asociar productos y generar pedidos.
+                    </p>
+                `}
+            </div>
+        `,
+        actions: [
+            { label: "Cerrar", variant: "cancel", value: null },
+            { label: "+ Nuevo proveedor", value: "new" }
+        ],
+        onOpen: (body) => {
+            body.querySelectorAll("[data-edit-supplier]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const pv = proveedores.find(x => x.id === btn.dataset.editSupplier);
+                    if (!pv) return;
+
+                    const nombre = await showPrompt({
+                        title: "Renombrar proveedor",
+                        label: "Nombre",
+                        value: pv.name,
+                        validate: (v) => v.length === 0 ? "El nombre no puede quedar vacío." : null
+                    });
+                    if (nombre === null) return;
+
+                    pv.name = nombre.trim();
+                    saveCurrentUser();
+                    showSuppliersPanel();
+                });
+            });
+
+            body.querySelectorAll("[data-delete-supplier]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const pv = proveedores.find(x => x.id === btn.dataset.deleteSupplier);
+                    if (!pv) return;
+
+                    const usados = products.filter(p => p.proveedorId === pv.id).length;
+
+                    const confirmed = await showConfirm({
+                        title: "Eliminar proveedor",
+                        message:
+                            `¿Eliminar a "${pv.name}"?` +
+                            (usados > 0 ? `\n\n${usados} producto(s) quedarán sin proveedor.` : ""),
+                        confirmLabel: "Eliminar",
+                        danger: true
+                    });
+                    if (!confirmed) return;
+
+                    proveedores = proveedores.filter(x => x.id !== pv.id);
+                    products.forEach(p => {
+                        if (p.proveedorId === pv.id) p.proveedorId = null;
+                    });
+
+                    saveCurrentUser();
+                    showSuppliersPanel();
+                });
+            });
+        }
+    });
+
+    // El botón "nuevo proveedor" es la última acción del diálogo.
+    const botones = dialogActions.querySelectorAll("button");
+    const nuevo = botones[botones.length - 1];
+    nuevo.addEventListener("click", async () => {
+        const nombre = await showPrompt({
+            title: "Nuevo proveedor",
+            label: "Nombre del proveedor",
+            placeholder: "Ej: Distribuidora Don Pepe",
+            validate: (v) => v.length === 0 ? "Escribe un nombre." : null
+        });
+        if (nombre === null) return;
+
+        const telefono = await showPrompt({
+            title: "Teléfono (opcional)",
+            label: "Teléfono o WhatsApp",
+            placeholder: "Ej: 300 123 4567"
+        });
+
+        proveedores.push({
+            id: crypto.randomUUID(),
+            name: nombre.trim(),
+            phone: telefono ? telefono.trim() : "",
+            note: ""
+        });
+
+        saveCurrentUser();
+        closeDialog();
+        showSuppliersPanel();
+    });
+}
+
+// Genera el pedido de reposición, agrupado por proveedor
+function showPedidoReorden() {
+    const paraReponer = productsToReorder();
+
+    if (paraReponer.length === 0) {
+        showAlert({
+            title: "Nada que pedir",
+            message: "Ningún producto está por debajo de su stock mínimo."
+        });
+        return;
+    }
+
+    // Se agrupa por proveedor
+    const porProveedor = new Map();
+    const sinProveedor = [];
+
+    for (const producto of paraReponer) {
+        if (!producto.proveedorId) {
+            sinProveedor.push(producto);
+            continue;
+        }
+        if (!porProveedor.has(producto.proveedorId)) porProveedor.set(producto.proveedorId, []);
+        porProveedor.get(producto.proveedorId).push(producto);
+    }
+
+    const secciones = [];
+
+    for (const [proveedorId, lista] of porProveedor) {
+        const pv = proveedores.find(p => p.id === proveedorId);
+        const titulo = pv ? pv.nombre : "Proveedor desconocido";
+        const texto = pv
+            ? pedidoEnTexto(pv, lista)
+            : pedidoEnTexto({ nombre: titulo, telefono: "" }, lista);
+
+        secciones.push(`
+            <div class="orderBlock">
+                <div class="orderHead">
+                    <strong>${escapeHtml(titulo)}</strong>
+                    ${pv && pv.phone ? `<span>${escapeHtml(pv.phone)}</span>` : ""}
+                </div>
+                <pre class="orderText">${escapeHtml(texto)}</pre>
+                <button class="catBt" data-copy-order="${escapeHtml(pv ? pv.id : "")}" type="button">
+                    Copiar pedido
+                </button>
+            </div>
+        `);
+    }
+
+    if (sinProveedor.length > 0) {
+        const texto = pedidoEnTexto({ nombre: "Sin proveedor asignado", telefono: "" }, sinProveedor);
+        secciones.push(`
+            <div class="orderBlock">
+                <div class="orderHead">
+                    <strong>Sin proveedor asignado</strong>
+                    <span>asigna un proveedor a estos productos</span>
+                </div>
+                <pre class="orderText">${escapeHtml(texto)}</pre>
+                <button class="catBtn" data-copy-order="" type="button">Copiar pedido</button>
+            </div>
+        `);
+    }
+
+    openDialog({
+        title: "Pedido de reposición",
+        wide: true,
+        bodyHtml: `
+            <p class="dialogHint">
+                Copia el pedido y mándalo por WhatsApp o email a cada proveedor.
+            </p>
+            ${secciones.join("")}
+        `,
+        actions: [{ label: "Cerrar", variant: "cancel", value: null }],
+        onOpen: (body) => {
+            body.querySelectorAll("[data-copy-order]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const pre = btn.parentElement.querySelector(".orderText");
+                    const texto = pre.textContent;
+
+                    try {
+                        await navigator.clipboard.writeText(texto);
+                        btn.textContent = "¡Copiado!";
+                    } catch {
+                        // Si el portapapeles no está disponible, se
+                        // selecciona el texto para copiarlo a mano.
+                        const rango = document.createRange();
+                        rango.selectNodeContents(pre);
+                        const seleccion = window.getSelection();
+                        seleccion.removeAllRanges();
+                        seleccion.addRange(rango);
+                        btn.textContent = "Texto seleccionado";
+                    }
+
+                    setTimeout(() => { btn.textContent = "Copiar pedido"; }, 2000);
+                });
+            });
+        }
     });
 }
 
@@ -1861,14 +2362,53 @@ function showPurchasesView() {
 function renderPurchases() {
     purchasesList.innerHTML = "";
 
-    if (purchases.length === 0) {
-        purchasesList.innerHTML = `
-            <p class="purchaseEmpty">
-                Todavía no hay compras registradas.<br>
-                Cuando le compres a un proveedor, regístrala aquí para que
-                el stock y el historial queden al día.
-            </p>
+    // Lista de reorden: lo que hay que comprar ya, con el mínimo
+    // que dejó el dueño y la cantidad que se sugiere.
+    const paraReponer = productsToReorder();
+
+    if (paraReponer.length > 0) {
+        const box = document.createElement("div");
+        box.className = "reorderBox";
+        box.innerHTML = `
+            <div class="reorderHead">
+                <h3>Necesitan reorden</h3>
+                <span class="reorderCount">${paraReponer.length}</span>
+            </div>
+
+            <ul class="reorderList">
+                ${paraReponer.map(p => `
+                    <li>
+                        <span class="reorderName">${escapeHtml(p.name)}</span>
+                        <span class="reorderStock reorderStock--${stockLevel(p, stockDeProducto(p))}">
+                            ${escapeHtml(stockDeProducto(p))} ${escapeHtml(unitLabel(p))}
+                            ${Number(p.minStock) > 0 ? `· mínimo ${escapeHtml(p.minStock)}` : ""}
+                        </span>
+                    </li>
+                `).join("")}
+            </ul>
+
+            <button id="generatePurchaseBt" class="newCategoryBt" type="button">
+                + Generar compra con estos
+            </button>
         `;
+
+        purchasesList.appendChild(box);
+
+        box.querySelector("#generatePurchaseBt").addEventListener("click", () => {
+            act = "newPurchase";
+            myInventaryActions("newPurchase", paraReponer);
+        });
+    }
+
+    if (purchases.length === 0) {
+        const vacio = document.createElement("p");
+        vacio.className = "purchaseEmpty";
+        vacio.innerHTML = `
+            Todavía no hay compras registradas.<br>
+            Cuando le compres a un proveedor, regístrala aquí para que
+            el stock y el historial queden al día.
+        `;
+        purchasesList.appendChild(vacio);
         return;
     }
 
@@ -2080,8 +2620,22 @@ function display(prods) {
             <li class="productListEmpty">
                 <span class="productListEmptyIcon" aria-hidden="true">📦</span>
                 <p>${escapeHtml(emptyListMessage())}</p>
+                ${searchInp.value.trim() === "" && currentCategoryId === null ? `
+                    <button id="emptyAddProductBt" class="newCategoryBt" type="button">
+                        + Agregar el primer producto
+                    </button>
+                ` : ""}
             </li>
         `;
+
+        const btn = allProducts.querySelector("#emptyAddProductBt");
+        if (btn) {
+            btn.addEventListener("click", () => {
+                editingProduct = null;
+                act = "addProduct";
+                myInventaryActions('addProduct');
+            });
+        }
         return;
     }
 
@@ -2111,6 +2665,37 @@ function display(prods) {
             variantLine = `<p class="variantSummary">${sizesText}${colorsText}</p>`;
         }
 
+        const esReceta = !!prod.esReceta;
+        const unidad = unitLabel(prod);
+        const minimo = Number(prod.minStock) || 0;
+
+        // En una receta el stock se calcula con los insumos.
+        const stock = stockDeProducto(prod);
+        const nivel = stockLevel(prod, stock);
+        const costo = costoDeProducto(prod);
+        const margen = margenDeProducto(prod);
+
+        const stockLine = nivel === "ok"
+            ? `<p class="stockLine"><strong>Stock:</strong> ${escapeHtml(stock)} ${escapeHtml(unidad)}</p>`
+            : `<p class="stockLine stockLine--${nivel}">
+                   <span class="stockDot" aria-hidden="true"></span>
+                   <strong>Stock:</strong> ${escapeHtml(stock)} ${escapeHtml(unidad)}
+                   <span class="stockTag">${STOCK_LEVELS[nivel].label}</span>
+                   ${minimo > 0 ? `<span class="stockMin">mínimo ${escapeHtml(minimo)}</span>` : ""}
+               </p>`;
+
+        // Costo y margen: solo tienen sentido con costo de compra
+        const margenLine = (costo > 0 && margen !== null)
+            ? `<p class="productMargin">
+                   Costo ${escapeHtml(costo.toFixed(2))} ·
+                   Margen <strong class="${margen >= 30 ? "marginGood" : margen >= 10 ? "marginMid" : "marginLow"}">${escapeHtml(margen.toFixed(0))}%</strong>
+               </p>`
+            : "";
+
+        const recetaLine = esReceta
+            ? `<p class="productCat">Receta · ${escapeHtml((prod.ingredientes || []).length)} insumos</p>`
+            : "";
+
         li.innerHTML = `
             <input type="checkbox" class="cardSelect"
                    aria-label="Seleccionar ${escapeHtml(prod.name)}">
@@ -2128,17 +2713,22 @@ function display(prods) {
                 <button type="button" class="cardMenuItem" data-card-action="price" role="menuitem">
                     <span aria-hidden="true">🏷️</span> Cambiar precio
                 </button>
+                <button type="button" class="cardMenuItem" data-card-action="merma" role="menuitem">
+                    <span aria-hidden="true">📉</span> Registrar merma
+                </button>
                 <button type="button" class="cardMenuItem cardMenuItemDanger" data-card-action="delete" role="menuitem">
                     <span aria-hidden="true">🗑️</span> Eliminar producto
                 </button>
             </div>
 
-            <img class="pr" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(prod.name)}">
+            <img class="pr" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(prod.name)}" loading="lazy" decoding="async">
             <div class="productInfo">
                 <h3>${escapeHtml(prod.name)}</h3>
                 <p>$${escapeHtml(prod.price)}</p>
-                <p><strong>Stock:</strong> ${escapeHtml(prod.quantity)}</p>
+                ${stockLine}
                 ${catLine}
+                ${recetaLine}
+                ${margenLine}
                 ${variantLine}
             </div>
         `;
@@ -2170,7 +2760,14 @@ function display(prods) {
 function filterAn() {
     let filteredProducts = [];
     const text = searchInp.value.trim();
-    const base = getVisibleProducts();
+    let base = getVisibleProducts();
+
+    // Filtro por estado: en stock / stock bajo / agotado
+    const estadoSel = document.getElementById("searchState");
+    const estadoPedido = estadoSel ? estadoSel.value : "todos";
+    if (estadoPedido !== "todos") {
+        base = base.filter(prod => stockLevel(prod, stockDeProducto(prod)) === estadoPedido);
+    }
 
     if (text === "") {
         display(base);
@@ -2282,6 +2879,28 @@ function readProductForm() {
         return { error: "El nombre y el precio son obligatorios." };
     }
 
+    const minStockEl = document.getElementById("nminstock");
+    const unitEl = document.getElementById("nunit");
+    const costoEl = document.getElementById("ncosto");
+    const proveedorEl = document.getElementById("nproveedor");
+    const recetaEl = document.getElementById("nisreceta");
+
+    const minStock = minStockEl ? Math.max(0, Number(minStockEl.value) || 0) : 0;
+    const unit = unitEl && unitEl.value ? unitEl.value : "und";
+    const costoUnitario = costoEl ? Math.max(0, Number(costoEl.value) || 0) : 0;
+    const proveedorId = proveedorEl && proveedorEl.value ? proveedorEl.value : null;
+    const esReceta = recetaEl ? recetaEl.checked : false;
+
+    let ingredientes = [];
+    if (esReceta) {
+        ingredientes = [...modalcont.querySelectorAll(".recipeLine")]
+            .map(row => ({
+                productId: row.querySelector(".recipeProduct").value,
+                cantidad: Number(row.querySelector(".recipeQty").value) || 0
+            }))
+            .filter(ing => ing.productId && ing.cantidad > 0);
+    }
+
     const category = newCategory && newCategory.value ? newCategory.value : null;
     const subcategory = category && newSubcategory && newSubcategory.value
         ? newSubcategory.value
@@ -2388,6 +3007,7 @@ function readProductForm() {
 
     return {
         name, price, stock, image, category, subcategory,
+        minStock, unit, costoUnitario, proveedorId, esReceta, ingredientes,
         variants, variantMode, isClothing, clothing
     };
 }
@@ -2535,6 +3155,12 @@ async function confirmButton() {
 
                 product.category = data.category;
                 product.subcategory = data.subcategory;
+                product.minStock = data.minStock;
+                product.unit = data.unit;
+                product.costoUnitario = data.costoUnitario;
+                product.proveedorId = data.proveedorId;
+                product.esReceta = data.esReceta;
+                product.ingredientes = data.esReceta ? data.ingredientes : [];
 
                 if (data.isClothing) {
                     product.variants = data.variants;
@@ -2604,6 +3230,12 @@ async function confirmButton() {
                 image: data.image,
                 category: data.category,
                 subcategory: data.subcategory,
+                minStock: data.minStock,
+                unit: data.unit,
+                costoUnitario: data.costoUnitario,
+                proveedorId: data.proveedorId,
+                esReceta: data.esReceta,
+                ingredientes: data.esReceta ? data.ingredientes : [],
                 createdIn: new Date()
             };
 
@@ -2832,7 +3464,7 @@ async function confirmButton() {
                 const product = products.find(value => String(value.id) === String(consume.id));
                 if (!product) continue;
 
-                const missing = consume.quantity - product.quantity;
+                const missing = consume.quantity - stockDeProducto(product);
                 if (missing > 0) {
                     shortages.push(
                         `• ${product.name}: faltan ${missing} u. (stock actual: ${product.quantity})`
@@ -2856,10 +3488,9 @@ async function confirmButton() {
                     continue;
                 }
 
-                product.quantity -= consume.quantity;
-
-                // La venta también es un movimiento de inventario
-                recordStockChange(product, "sale", -consume.quantity, `Venta · ${consume.quantity} u.`);
+                // Si es una receta se descuentan sus insumos; si no, su
+                // propio stock. En ambos casos queda en el historial.
+                descontarPorVenta(product, consume.quantity);
             }
 
             // Guardar la venta ANTES de vaciar myList
@@ -2942,7 +3573,7 @@ function cancelCurrentAction() {
    11. INVENTORY ACTION MODALS (add product / restock / history)
    ============================================================ */
 
-function myInventaryActions(action) {
+function myInventaryActions(action, productosPrecargados = null) {
     overlay.classList.remove("hidden");
     modali.classList.remove("closing");
     modali.classList.add("show");
@@ -3135,6 +3766,48 @@ function myInventaryActions(action) {
                                value="${isEditing ? escapeHtml(editingProduct.quantity) : ""}">
                         <select id="ncategory">${categoryOptions}</select>
                         <select id="nsubcategory"></select>
+                        <input id="nminstock" type="number" min="0" placeholder="Stock mínimo (opcional)"
+                               value="${isEditing ? escapeHtml(editingProduct.minStock || "") : ""}">
+                        <select id="nunit">
+                            ${UNITS.map(u => `
+                                <option value="${u.id}" ${isEditing && editingProduct.unit === u.id ? "selected" : ""}>
+                                    ${u.label}
+                                </option>
+                            `).join("")}
+                        </select>
+                        <input id="ncosto" type="number" min="0" step="0.01"
+                               placeholder="Costo de compra (opcional)"
+                               value="${isEditing ? escapeHtml(editingProduct.costoUnitario || "") : ""}">
+                        <select id="nproveedor">
+                            <option value="">Sin proveedor</option>
+                            ${proveedores.map(pv => `
+                                <option value="${escapeHtml(pv.id)}" ${isEditing && editingProduct.proveedorId === pv.id ? "selected" : ""}>
+                                    ${escapeHtml(pv.name)}
+                                </option>
+                            `).join("")}
+                        </select>
+                    </div>
+
+                    <!-- Escandallo: un preparado armado con insumos del inventario -->
+                    <div class="recipeBlock">
+                        <label class="recipeToggle">
+                            <input type="checkbox" id="nisreceta"
+                                   ${isEditing && editingProduct.esReceta ? "checked" : ""}>
+                            <span>Es una receta (se prepara con insumos del inventario)</span>
+                        </label>
+
+                        <div id="recipeEditor" class="recipeEditor hidden">
+                            <h4 class="clothingBlockTitle">Ingredientes de la receta</h4>
+                            <div id="recipeLines"></div>
+                            <button id="addRecipeLineBt" class="cancelBt" type="button">+ Agregar ingrediente</button>
+                            <p class="recipeCost">
+                                Costo del preparado: <strong id="recipeCostValue">$0</strong>
+                            </p>
+                            <p class="dialogHint">
+                                Al vender este producto se descuentan los insumos
+                                automáticamente. El stock sale de ellos.
+                            </p>
+                        </div>
                     </div>
 
                     ${clothingBlockHtml}
@@ -3173,6 +3846,106 @@ function myInventaryActions(action) {
 
             fillSubcategories(presetSubcategory);
             categorySelect.addEventListener("change", () => fillSubcategories(null));
+
+            // ------------------------------------------------------
+            // ESCANDALLO: el producto puede armarse con insumos
+            // ------------------------------------------------------
+            const recetaToggle = document.getElementById("nisreceta");
+            const recipeEditor = document.getElementById("recipeEditor");
+            const recipeLines = document.getElementById("recipeLines");
+            const recipeCostValue = document.getElementById("recipeCostValue");
+            const stockField = document.getElementById("nstock");
+
+            // Solo se pueden usar insumos que NO son recetas.
+            const insumosPosibles = products.filter(p => !p.esReceta);
+
+            let lineasReceta = isEditing && Array.isArray(editingProduct.ingredientes)
+                ? editingProduct.ingredientes.map(ing => ({ ...ing }))
+                : [];
+
+            function recetaCosto() {
+                return lineasReceta.reduce((suma, ing) => {
+                    const insumo = products.find(p => p.id === ing.productId);
+                    if (!insumo) return suma;
+                    return suma + (Number(insumo.costoUnitario) || 0) * (Number(ing.cantidad) || 0);
+                }, 0);
+            }
+
+            function renderRecipeLines() {
+                if (lineasReceta.length === 0) {
+                    recipeLines.innerHTML = `
+                        <p class="dialogHint">Todavía no tiene ingredientes.</p>
+                    `;
+                    recipeCostValue.textContent = "$0";
+                    return;
+                }
+
+                recipeLines.innerHTML = lineasReceta.map((ing, index) => {
+                    const opciones = insumosPosibles.map(p => `
+                        <option value="${escapeHtml(p.id)}" ${p.id === ing.productId ? "selected" : ""}>
+                            ${escapeHtml(p.name)} (${escapeHtml(stockDeProducto(p))} ${escapeHtml(unitLabel(p))})
+                        </option>
+                    `).join("");
+
+                    return `
+                        <div class="recipeLine" data-index="${index}">
+                            <select class="recipeProduct">${opciones}</select>
+                            <input type="number" class="recipeQty" min="0" step="0.01"
+                                   placeholder="Cantidad" value="${escapeHtml(ing.cantidad ?? "")}">
+                            <button class="recipeRemove" type="button" aria-label="Quitar">&times;</button>
+                        </div>
+                    `;
+                }).join("");
+
+                recipeLines.querySelectorAll(".recipeLine").forEach(row => {
+                    const index = Number(row.dataset.index);
+
+                    row.querySelector(".recipeProduct").addEventListener("change", (event) => {
+                        lineasReceta[index].productId = event.target.value;
+                        renderRecipeLines();
+                    });
+
+                    row.querySelector(".recipeQty").addEventListener("input", (event) => {
+                        lineasReceta[index].cantidad = Number(event.target.value) || 0;
+                        recipeCostValue.textContent = `$${recetaCosto().toFixed(2)}`;
+                    });
+
+                    row.querySelector(".recipeRemove").addEventListener("click", () => {
+                        lineasReceta.splice(index, 1);
+                        renderRecipeLines();
+                    });
+                });
+
+                recipeCostValue.textContent = `$${recetaCosto().toFixed(2)}`;
+            }
+
+            function toggleReceta() {
+                const activo = recetaToggle.checked;
+                recipeEditor.classList.toggle("hidden", !activo);
+
+                // En una receta el stock sale de los insumos.
+                stockField.disabled = activo;
+                if (activo) {
+                    stockField.value = "";
+                    stockField.placeholder = "Lo calculan los insumos";
+                } else {
+                    stockField.placeholder = "Stock inicial";
+                }
+            }
+
+            recetaToggle.addEventListener("change", () => {
+                toggleReceta();
+                renderRecipeLines();
+            });
+
+            document.getElementById("addRecipeLineBt").addEventListener("click", () => {
+                if (insumosPosibles.length === 0) return;
+                lineasReceta.push({ productId: insumosPosibles[0].id, cantidad: 1 });
+                renderRecipeLines();
+            });
+
+            toggleReceta();
+            renderRecipeLines();
 
             // ------------------------------------------------------
             // TIENDA DE ROPA: tallas, colores y cantidades por variante
@@ -3578,8 +4351,21 @@ function myInventaryActions(action) {
                 updateTotal();
             }
 
-            // La primera línea ya viene con un producto y cantidad 1.
-            lines.push({ productId: products[0].id, cantidad: 1, precio: 0 });
+            // Si vienen productos precargados (lista de reorden), se
+            // ponen con la cantidad sugerida para dejar el stock arriba
+            // del mínimo.
+            if (productosPrecargados && productosPrecargados.length > 0) {
+                for (const producto of productosPrecargados) {
+                    lines.push({
+                        productId: producto.id,
+                        cantidad: suggestedOrderQuantity(producto),
+                        precio: 0
+                    });
+                }
+            } else {
+                // La primera línea ya viene con un producto y cantidad 1.
+                lines.push({ productId: products[0].id, cantidad: 1, precio: 0 });
+            }
             renderLines();
 
             document.getElementById("addPurchaseLineBt").addEventListener("click", () => {
@@ -4093,6 +4879,10 @@ importFileInput.addEventListener("change", async () => {
     importFileInput.value = "";   // permite reimportar el mismo archivo
     if (file) await importProfileData(file);
 });
+
+// --- Proveedores y pedido de reposición ---
+suppliersBt.addEventListener("click", showSuppliersPanel);
+orderReorderBt.addEventListener("click", showPedidoReorden);
 
 // --- Barra flotante de selección ---
 selEditBt.addEventListener("click", async () => {

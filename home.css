@@ -252,7 +252,15 @@ body {
     flex-direction: column;
     gap: 0.45rem;
 
-    min-width: 190px;
+    min-width: 165px;
+}
+
+/* Los dos selectores van juntos para que no se partan en dos filas */
+.searchFilters {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.85rem;
+    flex-wrap: wrap;
 }
 
 label {
@@ -428,6 +436,79 @@ select.inp:focus {
 .productInfo p:last-of-type {
     color: var(--ink-soft);
     font-size: 0.82rem;
+}
+
+/* Línea de stock con el estado del producto */
+.stockLine {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+
+    flex-wrap: wrap;
+}
+
+.stockDot {
+    width: 0.55rem;
+    height: 0.55rem;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+}
+
+.stockTag {
+    padding: 0.05rem 0.4rem;
+
+    border-radius: 999px;
+
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.stockMin {
+    color: var(--ink-mute);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+/* Verde: hay stock de sobra */
+.stockLine--ok .stockDot {
+    background: var(--success);
+}
+
+.stockLine--ok .stockTag {
+    background: rgba(91, 122, 94, 0.16);
+    color: var(--success);
+}
+
+/* Amarillo: toca reponer */
+.stockLine--reorden {
+    color: #8a5a12;
+}
+
+.stockLine--reorden .stockDot {
+    background: var(--marigold);
+}
+
+.stockLine--reorden .stockTag {
+    background: rgba(214, 138, 52, 0.2);
+    color: #8a5a12;
+}
+
+/* Rojo: crítico (llegó al mínimo o se agotó) */
+.stockLine--critico {
+    color: var(--danger);
+}
+
+.stockLine--critico .stockDot {
+    background: var(--danger);
+}
+
+.stockLine--critico .stockTag {
+    background: rgba(154, 61, 52, 0.16);
+    color: var(--danger);
 }
 
 
@@ -1857,6 +1938,14 @@ li:focus-visible {
 
     .searchPan > label {
         min-width: 0;
+        flex: 1;
+    }
+
+    .searchFilters {
+        width: 100%;
+    }
+
+    .searchFilters > label {
         flex: 1;
     }
 
@@ -3699,6 +3788,99 @@ li:focus-visible {
     font-weight: 800;
 }
 
+.reorderBox {
+    grid-column: 1 / -1;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+
+    padding: 1.1rem 1.2rem;
+
+    background: var(--white);
+    border: 1px solid var(--beige-light);
+    border-left: 4px solid var(--marigold);
+    border-radius: var(--radius-md);
+
+    box-shadow: var(--shadow-soft);
+}
+
+.reorderHead {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.reorderHead h3 {
+    font-family: var(--font-display);
+    color: var(--ink);
+
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.reorderCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 1.5rem;
+    height: 1.5rem;
+
+    padding: 0 0.45rem;
+
+    border-radius: 999px;
+
+    background: var(--marigold);
+    color: var(--white);
+
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.reorderList {
+    list-style: none;
+
+    display: flex;
+    flex-direction: column;
+
+    margin: 0;
+    padding: 0;
+
+    border-top: 1px solid var(--beige-light);
+}
+
+.reorderList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+
+    padding: 0.45rem 0;
+
+    border-bottom: 1px solid var(--beige-light);
+}
+
+.reorderList li:last-child {
+    border-bottom: none;
+}
+
+.reorderName {
+    color: var(--ink);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.reorderStock {
+    flex-shrink: 0;
+
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.reorderStock--reorden { color: #8a5a12; }
+.reorderStock--critico { color: var(--danger); }
+
 .purchaseEmpty {
     grid-column: 1 / -1;
 
@@ -4069,4 +4251,284 @@ li:focus-visible {
     text-align: center;
     font-size: 0.9rem;
     line-height: 1.5;
+}
+
+/* =========================================================
+   ESCANDALLO (RECETAS) Y COSTOS
+   ========================================================= */
+
+.recipeBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+
+    margin-top: -0.2rem;
+}
+
+.recipeToggle {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+
+    padding: 0.7rem 0.9rem;
+
+    background: var(--paper);
+    border: 1px solid var(--beige-light);
+    border-radius: var(--radius-sm);
+
+    color: var(--ink);
+    font-size: 0.88rem;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.recipeToggle input {
+    accent-color: var(--rust);
+    width: 1.05rem;
+    height: 1.05rem;
+    cursor: pointer;
+}
+
+.recipeEditor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+
+    padding: 0.9rem;
+
+    background: var(--paper);
+    border: 1px dashed var(--beige);
+    border-radius: var(--radius-sm);
+}
+
+.recipeEditor.hidden {
+    display: none;
+}
+
+.recipeLine {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recipeLine select {
+    flex: 1 1 10rem;
+    min-width: 0;
+
+    height: 2.5rem;
+    padding: 0 0.6rem;
+
+    border: 1.5px solid var(--beige);
+    border-radius: var(--radius-sm);
+
+    background: var(--white);
+    color: var(--ink);
+
+    outline: none;
+    font: inherit;
+    font-size: 0.84rem;
+}
+
+.recipeLine input {
+    width: 6rem;
+    flex-shrink: 0;
+
+    height: 2.5rem;
+    padding: 0 0.5rem;
+
+    border: 1.5px solid var(--beige);
+    border-radius: var(--radius-sm);
+
+    background: var(--white);
+    color: var(--ink);
+
+    outline: none;
+    font: inherit;
+    font-size: 0.84rem;
+    text-align: center;
+}
+
+.recipeLine select:focus,
+.recipeLine input:focus {
+    border-color: var(--rust);
+    box-shadow: 0 0 0 3px rgba(182, 80, 47, 0.15);
+}
+
+.recipeRemove {
+    flex-shrink: 0;
+
+    width: 1.9rem;
+    height: 1.9rem;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid var(--beige);
+    border-radius: 50%;
+
+    background: var(--white);
+    color: var(--danger);
+
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.recipeRemove:hover {
+    background: #f8ece9;
+    border-color: var(--danger);
+}
+
+.recipeCost {
+    color: var(--ink-soft);
+    font-size: 0.86rem;
+}
+
+.recipeCost strong {
+    color: var(--rust-dark);
+    font-size: 1rem;
+}
+
+/* Costo y margen en la tarjeta del producto */
+.productMargin {
+    color: var(--ink-mute);
+    font-size: 0.76rem;
+}
+
+.productMargin strong {
+    font-weight: 800;
+}
+
+.marginGood { color: var(--success); }
+.marginMid  { color: #8a5a12; }
+.marginLow  { color: var(--danger); }
+
+
+/* =========================================================
+   PROVEEDORES Y PEDIDO DE REPOSICIÓN
+   ========================================================= */
+
+.headerActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.supplierList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.supplierRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+
+    padding: 0.7rem 0.85rem;
+
+    background: var(--paper);
+    border: 1px solid var(--beige-light);
+    border-radius: var(--radius-sm);
+}
+
+.supplierInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+
+    min-width: 0;
+}
+
+.supplierInfo strong {
+    color: var(--ink);
+    font-size: 0.92rem;
+}
+
+.supplierInfo span {
+    color: var(--ink-mute);
+    font-size: 0.8rem;
+}
+
+.supplierNote {
+    font-style: italic;
+}
+
+.supplierActions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.orderBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+
+    padding: 0.9rem;
+
+    background: var(--paper);
+    border: 1px solid var(--beige-light);
+    border-radius: var(--radius-sm);
+}
+
+.orderHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.orderHead strong {
+    color: var(--ink);
+    font-size: 0.95rem;
+}
+
+.orderHead span {
+    color: var(--ink-mute);
+    font-size: 0.8rem;
+}
+
+.orderText {
+    margin: 0;
+
+    padding: 0.7rem 0.8rem;
+
+    background: var(--white);
+    border: 1px solid var(--beige-light);
+    border-radius: var(--radius-sm);
+
+    color: var(--ink-soft);
+
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.55;
+
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    user-select: text;
+}
+
+@media (max-width: 700px) {
+    .recipeLine {
+        flex-wrap: wrap;
+    }
+
+    .recipeLine select {
+        flex: 1 1 100%;
+    }
+
+    .recipeLine input {
+        flex: 1 1 0;
+        width: auto;
+    }
 }
