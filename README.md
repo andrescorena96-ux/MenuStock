@@ -145,7 +145,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre **103 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
+Cubre **108 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
 
 ---
 
@@ -208,6 +208,9 @@ La entrada se valida con una expresión regular y se suma término a término: *
 - [x] Cuenta / venta
 - [x] Tienda de ropa: tallas, colores y cantidad por variante
 - [x] Diálogos propios (sin `prompt`/`alert`/`confirm` nativos)
+- [x] Editar productos (incluida categoría y subcategoría)
+- [x] Menú de acciones por tarjeta (⋮) y barra flotante para varios
+- [x] Formulario de alta de perfil con color y contraseña opcional
 - [x] **Compras a proveedores** (entrada de stock, con anulación)
 - [x] Exportar / importar datos (respaldo en JSON)
 - [ ] Carrito y pedido del cliente final
@@ -244,6 +247,10 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | El formulario de alta salía recortado en una esquina | Tarjeta centrada de 800 px con rejilla de dos columnas |
 | Un `<header>` dentro del formulario heredaba la cabecera oxblood de la app | El selector `header` global se acotó a `#appRoot > header` |
 | La barra de acciones quedaba bajo el pliegue | La app ocupa el alto del viewport y la grilla se estira |
+| La barra inferior con 4 botones tapaba el catálogo | Barra delgada con una sola acción + menú ⋮ en cada tarjeta |
+| No había forma de actuar sobre varios productos | Casilla por tarjeta + barra flotante de acciones múltiples |
+| Dos productos con la misma inicial podían quedar con el MISMO id | El id lleva un fragmento de UUID: siempre es único |
+| Crear perfil pedía nombre y contraseña en diálogos sueltos | Formulario propio con nombre, negocio, color y contraseña opcional |
 | Al guardar se perdia la busqueda activa | efreshProducts() pasa por el filtro de busqueda |
 | Una lista vacia dejaba el espacio en blanco | Estado vacio que explica por que no hay productos |
 | Editar un producto y mudarlo de categoria lo hacia desaparecer | El aviso dice donde quedo y ofrece ir a esa categoria |

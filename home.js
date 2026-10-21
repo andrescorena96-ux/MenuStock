@@ -27,14 +27,15 @@ const categoriesBt = document.getElementById("categoriesBt");
 const newCategoryBt = document.getElementById("newCategoryBt");
 const historyBt = document.getElementById("historyBt");
 
-// Boton de editar producto
-const editProductBt = document.getElementById("editProduct");
+// Barra flotante de acciones (productos marcados)
+const selectionBar = document.getElementById("selectionBar");
+const selectionCount = document.getElementById("selectionCount");
+const selEditBt = document.getElementById("selEditBt");
+const selPriceBt = document.getElementById("selPriceBt");
+const selDeleteBt = document.getElementById("selDeleteBt");
+const selCancelBt = document.getElementById("selCancelBt");
 
-// Aviso de modo (editar / cambiar precio / eliminar producto)
-const modeBanner = document.getElementById("modeBanner");
-const modeBannerIcon = document.getElementById("modeBannerIcon");
-const modeBannerText = document.getElementById("modeBannerText");
-const modeCancelBt = document.getElementById("modeCancelBt");
+const mainEl = document.querySelector(".main");
 
 // Bienvenida / landing (MenúStock)
 const appRoot = document.getElementById("appRoot");
@@ -83,8 +84,6 @@ const addProduct = document.getElementById("addProduct");
 // Accumulate panel (bill / change price / delete)
 const accumulatePanel = document.getElementById("accumulatePanel");
 const accModalContent = document.getElementById("accModalContent");
-const changePrice = document.getElementById("changePrice");
-const deleteProduct = document.getElementById("delProduct");
 const accCancelBt = document.getElementById("accumulateCancelBt");
 const accConfirmBt = document.getElementById("accumulateConfirmBt");
 const alternativeCont = document.getElementById("alternativeCont");
@@ -363,11 +362,6 @@ document.addEventListener("keydown", (event) => {
         return;
     }
 
-    // 2) Si no, sale del modo "cambiar precio" / "eliminar producto".
-    if (isActionMode()) {
-        event.preventDefault();
-        resetActionMode();
-    }
 });
 
 const USERS_KEY = "menuStockUsers";
@@ -433,26 +427,6 @@ const PACK_OPTIONS = [
     { value: "24", label: "Caja (x24)" },
     { value: "none", label: "Ninguno (unidades directas)" }
 ];
-
-// Modos de la barra de acciones: el producto queda a la espera de
-// que el usuario elija cuáles quiere modificar o borrar.
-const ACTION_MODES = {
-    editProduct: {
-        icon: "✏️",
-        text: "Estás editando productos. Haz clic en el producto que quieras modificar.",
-        danger: false
-    },
-    changePrice: {
-        icon: "🏷️",
-        text: "Estás cambiando precios. Haz clic en los productos que quieras modificar.",
-        danger: false
-    },
-    delete: {
-        icon: "🗑️",
-        text: "Estás eliminando productos. Haz clic en los que quieras eliminar.",
-        danger: true
-    }
-};
 
 const ACTION_LABELS = {
     created: "Producto creado",
@@ -819,6 +793,16 @@ function displayProfiles() {
 
     profileList.innerHTML = "";
 
+    if (users.length === 0) {
+        profileList.innerHTML = `
+            <p class="profileEmpty">
+                Todavía no hay perfiles. Crea el primero para empezar a llevar
+                el inventario de tu negocio.
+            </p>
+        `;
+        return;
+    }
+
     users.forEach(user => {
         const card = document.createElement("div");
         card.classList.add("profileCard");
@@ -828,13 +812,16 @@ function displayProfiles() {
         const type = storeTypeInfo(user.storeType);
         const lockIcon = user.password ? " 🔒" : "";
 
+        const negocio = profileBusiness(user);
+
         card.innerHTML = `
-            <div class="profileAvatar">
+            <div class="profileAvatar" style="background:${profileColor(user)}">
                 ${escapeHtml(firstLetter)}
             </div>
             <div class="profileInfo">
                 <h3>${escapeHtml(user.profile.name)}${lockIcon}</h3>
                 <span>${type.icon} ${escapeHtml(type.label)}</span>
+                ${negocio ? `<span class="profileBusiness">${escapeHtml(negocio)}</span>` : ""}
             </div>
             <button class="profileSelect" type="button">
                 Entrar
@@ -911,9 +898,6 @@ function selectProfile(userId) {
 
     hideProfiles();
 
-    // Cambiar de perfil sale del modo de acción: el modo pertenece
-    // al inventario del perfil anterior.
-    resetActionMode();
 
     // Cada perfil entra viendo todos sus productos
     currentCategoryId = null;
@@ -923,57 +907,179 @@ function selectProfile(userId) {
     updateProfileUI();
 }
 
-// ----------------------------------------
-// CREAR PERFIL: paso final (nombre + contraseña)
-// Se llama después de elegir tipo de negocio (y tallas, si es
-// una tienda de ropa). Si el usuario cancela en cualquier punto
-// de esta parte, simplemente no se crea el perfil.
-// ----------------------------------------
-async function finishProfileCreation() {
-    const name = await showPrompt({
-        title: "Nuevo perfil",
-        label: "Nombre del perfil",
-        placeholder: "Ej: Mi Tienda del barrio",
-        validate: (value) => value.length === 0 ? "Escribe un nombre para el perfil." : null
-    });
+/* ============================================================
+   4c. FORMULARIO DE NUEVO PERFIL
+   Antes se pedía el nombre y la contraseña en dos diálogos
+   sueltos, y la contraseña era obligatoria. Ahora es un
+   formulario: nombre, nombre del negocio, color y contraseña
+   opcional.
+   ============================================================ */
 
-    if (name === null) {
+const PROFILE_COLORS = [
+    { id: "oxblood",  color: "#5c1622" },
+    { id: "rust",     color: "#b6502f" },
+    { id: "marigold", color: "#d68a34" },
+    { id: "olive",    color: "#5b7a5e" },
+    { id: "blue",     color: "#4a6d8c" },
+    { id: "plum",     color: "#7a4a63" },
+    { id: "brown",    color: "#7a5c42" },
+    { id: "slate",    color: "#5f6672" }
+];
+
+// Color del perfil (los perfiles viejos no lo tienen: usan el primero)
+function profileColor(user) {
+    const id = user && user.profile ? user.profile.color : null;
+    const found = PROFILE_COLORS.find(c => c.id === id);
+    return found ? found.color : PROFILE_COLORS[0].color;
+}
+
+// Nombre del negocio (opcional)
+function profileBusiness(user) {
+    return (user && user.profile && user.profile.business) ? user.profile.business : "";
+}
+
+function showProfileForm() {
+    return new Promise(resolve => {
+        dialogResolve = resolve;
+
+        openDialog({
+            title: "Nuevo perfil",
+            wide: true,
+            bodyHtml: `
+                <div class="profileForm">
+
+                    <div class="profileFormRow">
+                        <span class="profileFormLabel">Color del perfil</span>
+                        <div class="colorPicker" role="radiogroup" aria-label="Color del perfil">
+                            ${PROFILE_COLORS.map((c, i) => `
+                                <button type="button"
+                                        class="colorSwatch${i === 0 ? " selected" : ""}"
+                                        role="radio" aria-checked="${i === 0}"
+                                        data-color="${c.id}" aria-label="Color ${c.id}"
+                                        style="background:${c.color}"></button>
+                            `).join("")}
+                        </div>
+                    </div>
+
+                    <div class="profileFormRow">
+                        <label class="profileFormLabel" for="profileNameInput">Nombre del perfil</label>
+                        <input id="profileNameInput" class="dialogInput" type="text"
+                               placeholder="Ej: Mi Tienda del barrio" autocomplete="off">
+                    </div>
+
+                    <div class="profileFormRow">
+                        <label class="profileFormLabel" for="profileBusinessInput">
+                            Nombre del negocio (opcional)
+                        </label>
+                        <input id="profileBusinessInput" class="dialogInput" type="text"
+                               placeholder="Ej: Bodega Don Pepe" autocomplete="off">
+                    </div>
+
+                    <div class="profileFormRow">
+                        <label class="profileFormLabel" for="profilePasswordInput">
+                            Contraseña (opcional)
+                        </label>
+                        <input id="profilePasswordInput" class="dialogInput" type="password"
+                               placeholder="Déjala vacía para abrirlo sin contraseña"
+                               autocomplete="new-password">
+                        <p class="dialogHint">
+                            Si la dejas vacía, el perfil se abre sin pedir contraseña.
+                        </p>
+                    </div>
+
+                    <p id="profileFormError" class="dialogError"></p>
+                </div>
+            `,
+            actions: [
+                { label: "Cancelar", variant: "cancel", value: null },
+                {
+                    label: "Crear perfil",
+                    onClick: (body) => {
+                        const nombre = body.querySelector("#profileNameInput").value.trim();
+                        const negocio = body.querySelector("#profileBusinessInput").value.trim();
+                        const clave = body.querySelector("#profilePasswordInput").value.trim();
+                        const swatch = body.querySelector(".colorSwatch.selected");
+
+                        if (!nombre) {
+                            body.querySelector("#profileFormError").textContent =
+                                "El perfil necesita un nombre.";
+                            body.querySelector("#profileNameInput").focus();
+                            return false;
+                        }
+
+                        return {
+                            name: nombre,
+                            business: negocio,
+                            password: clave || null,
+                            color: swatch ? swatch.dataset.color : PROFILE_COLORS[0].id
+                        };
+                    }
+                }
+            ],
+            onOpen: (body) => {
+                body.querySelectorAll(".colorSwatch").forEach(swatch => {
+                    swatch.addEventListener("click", () => {
+                        body.querySelectorAll(".colorSwatch").forEach(s => {
+                            s.classList.remove("selected");
+                            s.setAttribute("aria-checked", "false");
+                        });
+                        swatch.classList.add("selected");
+                        swatch.setAttribute("aria-checked", "true");
+                    });
+                });
+
+                const input = body.querySelector("#profileNameInput");
+                input.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        const buttons = dialogActions.querySelectorAll("button");
+                        buttons[buttons.length - 1].click();
+                    }
+                });
+
+                input.focus();
+            }
+        });
+    });
+}
+
+
+/* ============================================================
+   4d. CREAR PERFIL: paso final (los datos)
+   Se llama después de elegir el tipo de negocio (y las tallas,
+   si es una tienda de ropa).
+   ============================================================ */
+
+async function finishProfileCreation() {
+    const datos = await showProfileForm();
+
+    if (!datos) {
         resetPendingProfileState();
         return;
     }
-
-    const cleanName = name.trim();
 
     const users = getUsers();
     const alreadyExists = users.some(
-        user => user.profile.name.toLowerCase() === cleanName.toLowerCase()
+        user => user.profile.name.toLowerCase() === datos.name.toLowerCase()
     );
 
     if (alreadyExists) {
-        await showAlert({ title: "Nombre en uso", message: "Ya existe un perfil con ese nombre." });
+        await showAlert({
+            title: "Nombre en uso",
+            message: `Ya existe un perfil con el nombre "${datos.name}".`
+        });
         resetPendingProfileState();
         return;
     }
-
-    const password = await showPrompt({
-        title: "Contraseña del perfil",
-        label: `Crea una contraseña para "${cleanName}"`,
-        hint: "Protege este perfil: se pedirá cada vez que se abra la app.",
-        type: "password",
-        validate: (value) => value.length === 0 ? "Necesitas una contraseña para proteger este perfil." : null
-    });
-
-    if (password === null) {
-        resetPendingProfileState();
-        return;
-    }
-
-    const cleanPassword = password.trim();
 
     const newUser = {
         id: crypto.randomUUID(),
-        profile: { name: cleanName },
-        password: cleanPassword,
+        profile: {
+            name: datos.name,
+            business: datos.business,
+            color: datos.color
+        },
+        password: datos.password,
         storeType: selectedStoreType,
         clothingConfig: selectedStoreType === "clothing" ? pendingClothingConfig : null,
         // NUEVO PERFIL = INVENTARIO VACÍO (con categorías sugeridas si es ropa)
@@ -1131,8 +1237,11 @@ function updateProfileUI() {
 
     profileButtonName.textContent = name;
     profileButtonAvatar.textContent = firstLetter;
+    profileButtonAvatar.style.background = profileColor(currentUser);
+
     profileMenuName.textContent = name;
     profileMenuAvatar.textContent = firstLetter;
+    profileMenuAvatar.style.background = profileColor(currentUser);
 }
 
 
@@ -1193,7 +1302,7 @@ function refreshProducts() {
     // y al guardar un producto se perdía el filtro que el usuario tenía
     // puesto, aunque el texto siguiera en el buscador.
     filterAn();
-    highlightSelected();
+    updateSelection();
 }
 
 // ¿El producto se está viendo ahora mismo en la pantalla?
@@ -1220,56 +1329,162 @@ function emptyListMessage() {
 
 
 /* ============================================================
-   5e. MODO DE ACCIÓN (cambiar precio / eliminar producto)
-   El modo se hace visible: un aviso arriba de la barra dice qué
-   estás haciendo y cómo salir, el botón queda marcado, y las
-   tarjetas elegidas se resaltan.
+   5e. MENÚ POR TARJETA Y SELECCIÓN MÚLTIPLE
+   Cada tarjeta tiene su propio menú ⋮ con las acciones de ese
+   producto. Para trabajar en varios a la vez se marcan con la
+   casilla y aparece una barra flotante abajo.
    ============================================================ */
 
-function isActionMode() {
-    return act === "editProduct" || act === "changePrice" || act === "delete";
-}
+// Id de los productos marcados con la casilla
+let selectedProductIds = new Set();
 
-// Pinta el aviso de modo y marca el botón activo
-function updateActionMode() {
-    const info = ACTION_MODES[act];
-
-    if (!info) {
-        modeBanner.classList.add("hidden");
-        editProductBt.classList.remove("active");
-        changePrice.classList.remove("active");
-        delProduct.classList.remove("active");
-        allProducts.classList.remove("modeDelete");
-        return;
-    }
-
-    modeBanner.classList.remove("hidden");
-    modeBanner.classList.toggle("danger", info.danger);
-    modeBannerIcon.textContent = info.icon;
-    modeBannerText.textContent = info.text;
-
-    editProductBt.classList.toggle("active", act === "editProduct");
-    changePrice.classList.toggle("active", act === "changePrice");
-    delProduct.classList.toggle("active", act === "delete");
-    allProducts.classList.toggle("modeDelete", act === "delete");
-}
-
-// Marca las tarjetas que ya están en la cola del modo actual
-function highlightSelected() {
-    const enCola = isActionMode()
-        ? new Set(myList.map(item => String(item.id)))
-        : new Set();
-
-    allProducts.querySelectorAll(".productCard").forEach(card => {
-        card.classList.toggle("selected", enCola.has(String(card.dataset.id)));
+// Abre y cierra el menú ⋮ de una tarjeta
+function closeCardMenus() {
+    allProducts.querySelectorAll(".cardMenu").forEach(menu => { menu.hidden = true; });
+    allProducts.querySelectorAll(".cardMenuBtn").forEach(btn => {
+        btn.setAttribute("aria-expanded", "false");
     });
 }
 
-// Salir del modo: cancela la acción en curso y deja todo como estaba
-function resetActionMode() {
-    if (isActionMode()) {
-        cancelCurrentAction();
+function toggleCardMenu(button) {
+    const menu = button.parentElement.querySelector(".cardMenu");
+    const estabaAbierto = menu && !menu.hidden;
+
+    closeCardMenus();
+
+    if (menu && !estabaAbierto) {
+        menu.hidden = false;
+        button.setAttribute("aria-expanded", "true");
     }
+}
+
+// Sincroniza las casillas, el resaltado de las tarjetas y la
+// barra flotante.
+function updateSelection() {
+    const tarjetas = [...allProducts.querySelectorAll(".productCard")];
+    const marcadas = new Set();
+
+    for (const card of tarjetas) {
+        const check = card.querySelector(".cardSelect");
+        const marcado = !!check && check.checked;
+        card.classList.toggle("selected", marcado);
+        if (marcado) marcadas.add(String(card.dataset.id));
+    }
+
+    selectedProductIds = marcadas;
+
+    const n = marcadas.size;
+    selectionCount.textContent = n === 1
+        ? "1 producto seleccionado"
+        : `${n} productos seleccionados`;
+
+    selectionBar.classList.toggle("hidden", n === 0);
+    mainEl.classList.toggle("selectionOpen", n > 0);
+}
+
+function clearSelection() {
+    allProducts.querySelectorAll(".cardSelect").forEach(check => { check.checked = false; });
+    selectedProductIds = new Set();
+    updateSelection();
+}
+
+function getSelectedProducts() {
+    return products.filter(p => selectedProductIds.has(String(p.id)));
+}
+
+// --- Acciones sobre un solo producto (menú ⋮ de la tarjeta) ---
+
+async function handleCardAction(action, card) {
+    const product = products.find(p => String(p.id) === String(card.dataset.id));
+    if (!product) return;
+
+    if (action === "edit") {
+        openProductEditor(product);
+        return;
+    }
+    if (action === "price") {
+        await changeProductPrice([product]);
+        return;
+    }
+    if (action === "delete") {
+        await deleteProducts([product]);
+    }
+}
+
+// --- Acciones en bloque (varios productos marcados) ---
+
+async function changeProductPrice(lista) {
+    if (lista.length === 0) return;
+
+    const nuevo = await showPrompt({
+        title: lista.length === 1 ? "Cambiar precio" : `Cambiar precio de ${lista.length} productos`,
+        label: lista.length === 1
+            ? `Precio nuevo de "${lista[0].name}"`
+            : "Precio nuevo para todos los productos marcados",
+        value: lista.length === 1 ? lista[0].price : "",
+        type: "number",
+        validate: (value) => {
+            const numero = Number(value);
+            if (value === "" || !Number.isFinite(numero) || numero < 0) {
+                return "Escribe un precio válido.";
+            }
+            return null;
+        }
+    });
+
+    if (nuevo === null) return;
+
+    const precio = Number(nuevo);
+    for (const product of lista) {
+        product.price = precio;
+    }
+
+    refreshProducts();
+    updateSelection();
+
+    await showAlert({
+        title: "Precio actualizado",
+        message: lista.length === 1
+            ? `«${lista[0].name}» ahora cuesta $${precio}.`
+            : `${lista.length} productos ahora cuestan $${precio}.`
+    });
+}
+
+async function deleteProducts(lista) {
+    if (lista.length === 0) return;
+
+    const nombres = lista.length <= 3
+        ? lista.map(p => `• ${p.name}`).join("\n")
+        : `• ${lista.slice(0, 3).map(p => p.name).join("\n")}\n… y ${lista.length - 3} más`;
+
+    const confirmed = await showConfirm({
+        title: lista.length === 1 ? "Eliminar producto" : `Eliminar ${lista.length} productos`,
+        message:
+            `¿Eliminar?\n\n${nombres}\n\n` +
+            "El stock de estos productos queda registrado en el historial. " +
+            "Esta acción no se puede deshacer.",
+        confirmLabel: "Eliminar",
+        danger: true
+    });
+
+    if (!confirmed) return;
+
+    for (const product of lista) {
+        // Queda constancia de cuánto stock se fue con el producto
+        recordStockChange(product, "deleted", -product.quantity, "Producto eliminado");
+        const index = products.findIndex(p => String(p.id) === String(product.id));
+        if (index !== -1) products.splice(index, 1);
+    }
+
+    clearSelection();
+    refreshProducts();
+
+    await showAlert({
+        title: "Eliminado",
+        message: lista.length === 1
+            ? `Se eliminó «${lista[0].name}».`
+            : `Se eliminaron ${lista.length} productos.`
+    });
 }
 
 // Abrir el formulario de edición de un producto, con todos sus
@@ -1317,9 +1532,9 @@ function showProductsView() {
 }
 
 function showCategoriesView() {
-    // Cambiar de vista sale del modo de acción: si no, al volver se
-    // seguiría esperando que el usuario eligiera un producto para borrar.
-    resetActionMode();
+    // Al cambiar de vista se limpia la selección: las marcas pertenecen
+    // a la lista que se estaba viendo.
+    clearSelection();
 
     setActiveNav("categories");
     purchasesView.classList.add("hidden");
@@ -1628,7 +1843,7 @@ async function deleteSubcategory(categoryId, subcategoryId) {
    ============================================================ */
 
 function showPurchasesView() {
-    resetActionMode();
+    clearSelection();
 
     setActiveNav("purchases");
 
@@ -1897,6 +2112,27 @@ function display(prods) {
         }
 
         li.innerHTML = `
+            <input type="checkbox" class="cardSelect"
+                   aria-label="Seleccionar ${escapeHtml(prod.name)}">
+
+            <button type="button" class="cardMenuBtn"
+                    aria-label="Acciones de ${escapeHtml(prod.name)}"
+                    aria-haspopup="menu" aria-expanded="false">
+                <span aria-hidden="true">⋯</span>
+            </button>
+
+            <div class="cardMenu" role="menu" hidden>
+                <button type="button" class="cardMenuItem" data-card-action="edit" role="menuitem">
+                    <span aria-hidden="true">✏️</span> Editar producto
+                </button>
+                <button type="button" class="cardMenuItem" data-card-action="price" role="menuitem">
+                    <span aria-hidden="true">🏷️</span> Cambiar precio
+                </button>
+                <button type="button" class="cardMenuItem cardMenuItemDanger" data-card-action="delete" role="menuitem">
+                    <span aria-hidden="true">🗑️</span> Eliminar producto
+                </button>
+            </div>
+
             <img class="pr" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(prod.name)}">
             <div class="productInfo">
                 <h3>${escapeHtml(prod.name)}</h3>
@@ -1989,8 +2225,7 @@ function updateBill() {
     // Al terminar o cancelar cualquier acción, se vuelve al modo cuenta.
     act = "bill";
 
-    updateActionMode();
-    highlightSelected();
+    updateSelection();
     syncActionsBar();
 }
 
@@ -2021,7 +2256,7 @@ function closeModal() {
     modali.classList.add("closing");
     act = "bill";
 
-    updateActionMode();
+    updateSelection();
     syncActionsBar();
 }
 
@@ -2355,7 +2590,11 @@ async function confirmButton() {
             // ----------------------------------------
             // DAR DE ALTA UN PRODUCTO NUEVO
             // ----------------------------------------
-            const newId = `${data.name[0].toLowerCase()}-${Date.now()}`;
+            // El id tiene que ser único de verdad. Antes era la inicial
+            // del nombre más la hora: dos productos con la misma inicial
+            // creados en el mismo milisegundo quedaban con el MISMO id
+            // y las búsquedas por id devolvían el producto equivocado.
+            const newId = `p-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
             const createdProduct = {
                 id: newId,
@@ -2577,48 +2816,6 @@ async function confirmButton() {
         }
 
         // =========================
-        // CHANGE PRICE
-        // =========================
-        case "changePrice": {
-            if (myList.length === 0) {
-                await showAlert({ title: "Nada seleccionado", message: "No hay productos seleccionados." });
-                return;
-            }
-
-            for (let elem of myList) {
-                const product = products.find(value => String(value.id) === String(elem.id));
-                if (!product) continue;
-
-                const inp = document.getElementById(`${elem.id}inputChangePrice`);
-                if (!inp) continue;
-
-                const newPrice = inp.valueAsNumber;
-
-                if (Number.isNaN(newPrice) || newPrice < 0) {
-                    await showAlert({ title: "Precio inválido", message: `Ingresa un precio válido para ${product.name}.` });
-                    return;
-                }
-
-                product.price = newPrice;
-            }
-
-            refreshProducts();
-            messageAfterSave = { title: "Listo", message: "Precio actualizado." };
-
-            // Vaciar la cola de cambio de precio
-            myList = [];
-            act = "bill";
-
-            // Cerrar el panel
-            accumulatePanel.classList.remove("show");
-            accumulatePanel.classList.add("closing");
-
-            // Asegurar que "Aceptar" quede visible la próxima vez
-            accConfirmBt.classList.remove("hidden");
-            break;
-        }
-
-        // =========================
         // BILL
         // =========================
         case "bill": {
@@ -2681,37 +2878,6 @@ async function confirmButton() {
             break;
         }
 
-        // =========================
-        // DELETE
-        // =========================
-        case "delete": {
-            if (myList.length === 0) {
-                await showAlert({ title: "Nada seleccionado", message: "No hay productos seleccionados." });
-                return;
-            }
-
-            for (let toDelete of myList) {
-                const index = products.findIndex(value => String(value.id) === String(toDelete.id));
-                if (index !== -1) {
-                    const product = products[index];
-                    // Dejamos constancia de cuánto stock se fue con el producto
-                    recordStockChange(product, "deleted", -product.quantity, "Producto eliminado");
-                    products.splice(index, 1);
-                }
-            }
-
-            refreshProducts();
-            messageAfterSave = { title: "Listo", message: "Producto(s) eliminado(s)." };
-
-            myList = [];
-            act = "bill";
-
-            accumulatePanel.classList.remove("show");
-            accumulatePanel.classList.add("closing");
-
-            accConfirmBt.classList.remove("hidden");
-            break;
-        }
     }
 
     saveCurrentUser();
@@ -2721,7 +2887,7 @@ async function confirmButton() {
     // refreshProducts() respeta la categoría activa.
     refreshProducts();
 
-    updateActionMode();
+    updateSelection();
     syncActionsBar();
 
     if (messageAfterSave) {
@@ -2766,12 +2932,6 @@ function cancelCurrentAction() {
             closeModal();
             break;
         case 'bill':
-            updateBill();
-            break;
-        case 'changePrice':
-            updateBill();
-            break;
-        case 'delete':
             updateBill();
             break;
     }
@@ -3546,7 +3706,7 @@ function deleteItem(product, billListObj) {
 
 
 /* ============================================================
-   13. ACCUMULATE ACTIONS (bill / changePrice / delete)
+   13. ACCUMULATE ACTIONS (la cuenta)
    ============================================================ */
 
 async function accumulateActions(action, event) {
@@ -3591,8 +3751,6 @@ async function accumulateActions(action, event) {
 
             // Sumar el precio al total
             bill += Number(product.price);
-
-            highlightSelected();
 
             // Crear el panel de la cuenta
             accModalContent.innerHTML = `
@@ -3641,80 +3799,6 @@ async function accumulateActions(action, event) {
                     }
                 }
             });
-            break;
-        }
-
-        case 'changePrice': {
-            accConfirmBt.classList.remove("hidden");
-
-            if (obj === undefined) {
-                myList.push({
-                    id: product.id,
-                    name: product.name,
-                    currentPrice: product.price
-                });
-
-                highlightSelected();
-            } else {
-                await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de cambio de precio." });
-                return;
-            }
-
-            accModalContent.innerHTML = `
-                    <div class="billHeader">
-                        <h2>Productos</h2>
-                        <strong id="billTotal">${myList.length}</strong>
-                    </div>
-                    <div id ="changeList" class ="billList"></div>
-                `;
-
-            const changeListContainer = document.getElementById("changeList");
-            for (let productc of myList) {
-                changeListContainer.innerHTML += `
-                                <div class="billItem">
-                                    <span>${escapeHtml(productc.name)}</span>
-                                    <strong>${escapeHtml(productc.currentPrice)}</strong>
-                                    <input id="${escapeHtml(productc.id)}inputChangePrice" type="number" placeholder="Nuevo precio">
-                                </div>
-                                `;
-            }
-            break;
-        }
-
-        case 'delete': {
-            accConfirmBt.classList.remove("hidden");
-
-            if (obj === undefined) {
-                myList.push({
-                    id: product.id,
-                    name: product.name,
-                    createdIn: product.createdIn
-                });
-
-                highlightSelected();
-            } else {
-                await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de eliminación." });
-                return;
-            }
-
-            accModalContent.innerHTML = `
-                    <div class="billHeader">
-                        <h2>Productos</h2>
-                        <strong id="billTotal">${myList.length}</strong>
-                    </div>
-                    <div id ="delList" class ="billList"></div>
-                `;
-
-            const deleteContainer = document.getElementById("delList");
-            for (let productc of myList) {
-                deleteContainer.innerHTML += `
-                                <div class="billItem">
-                                    <strong>${escapeHtml(productc.name)}</strong>
-                                    <p>${escapeHtml(productc.createdIn)}</p>
-                                    <span>${escapeHtml(productc.id)}</span>
-                                </div>
-                                `;
-            }
             break;
         }
     }
@@ -3845,9 +3929,47 @@ filterCat.addEventListener("change", (event) => {
     }
 });
 
-// --- Product list clicks (bill / changePrice / delete accumulation) ---
+// --- Clics en la lista de productos ---
 allProducts.addEventListener("click", (event) => {
+    // 1) Botón ⋮: abre el menú de la tarjeta (sin sumar a la cuenta)
+    const menuBtn = event.target.closest(".cardMenuBtn");
+    if (menuBtn) {
+        event.stopPropagation();
+        toggleCardMenu(menuBtn);
+        return;
+    }
+
+    // 2) Opción del menú
+    const menuItem = event.target.closest("[data-card-action]");
+    if (menuItem) {
+        event.stopPropagation();
+        closeCardMenus();
+        handleCardAction(menuItem.dataset.cardAction, menuItem.closest(".productCard"));
+        return;
+    }
+
+    // 3) Casilla de selección: no cuenta como clic en el producto
+    if (event.target.classList.contains("cardSelect")) {
+        event.stopPropagation();
+        return;
+    }
+
+    // 4) Clic en la tarjeta: se suma a la cuenta
     accumulateActions(act, event);
+});
+
+// La casilla actualiza la selección y la barra flotante
+allProducts.addEventListener("change", (event) => {
+    if (event.target.classList.contains("cardSelect")) {
+        updateSelection();
+    }
+});
+
+// Clic fuera de la tarjeta cierra el menú ⋮
+document.addEventListener("click", (event) => {
+    if (!event.target.closest(".cardMenu") && !event.target.closest(".cardMenuBtn")) {
+        closeCardMenus();
+    }
 });
 
 // --- Teclado: las tarjetas de producto y las acciones de la barra
@@ -3972,66 +4094,29 @@ importFileInput.addEventListener("change", async () => {
     if (file) await importProfileData(file);
 });
 
-// --- Aviso de modo ---
-modeCancelBt.addEventListener("click", () => {
-    resetActionMode();
-});
+// --- Barra flotante de selección ---
+selEditBt.addEventListener("click", async () => {
+    const lista = getSelectedProducts();
 
-// --- Accumulate panel buttons ---
-deleteProduct.addEventListener("click", () => {
-    // Si ya estamos en modo eliminar, un segundo clic cancela el modo.
-    if (act === "delete") {
-        resetActionMode();
+    if (lista.length !== 1) {
+        await showAlert({
+            title: "Editar producto",
+            message: "Para editar un producto, marca solo uno."
+        });
         return;
     }
 
-    myList = [];
-    act = "delete";
-
-    accConfirmBt.classList.add("hidden");
-
-    accModalContent.innerHTML = `
-        <span class="noProductsYet">
-            Haz clic en los productos que quieras eliminar.
-        </span>
-    `;
-
-    accumulatePanel.classList.remove("hidden");
-    accumulatePanel.classList.remove("closing");
-    accumulatePanel.classList.add("show");
-
-    updateActionMode();
-    highlightSelected();
-    syncActionsBar();
+    openProductEditor(lista[0]);
 });
 
-changePrice.addEventListener("click", () => {
-    // Si ya estamos en modo cambiar precio, un segundo clic cancela.
-    if (act === "changePrice") {
-        resetActionMode();
-        return;
-    }
+selPriceBt.addEventListener("click", () => changeProductPrice(getSelectedProducts()));
+selDeleteBt.addEventListener("click", () => deleteProducts(getSelectedProducts()));
 
-    myList = [];
-    act = "changePrice";
-
-    accConfirmBt.classList.add("hidden");
-
-    accModalContent.innerHTML = `
-        <span class="noProductsYet">
-            Haz clic en los productos cuyo precio quieras cambiar.
-        </span>
-    `;
-
-    accumulatePanel.classList.remove("hidden");
-    accumulatePanel.classList.remove("closing");
-    accumulatePanel.classList.add("show");
-
-    updateActionMode();
-    highlightSelected();
-    syncActionsBar();
+selCancelBt.addEventListener("click", () => {
+    clearSelection();
 });
 
+// --- Acumulate panel buttons ---
 accCancelBt.addEventListener("click", cancelCurrentAction);
 accConfirmBt.addEventListener("click", confirmButton);
 
@@ -4048,28 +4133,9 @@ restock.addEventListener("click", async () => {
 });
 
 addProduct.addEventListener("click", () => {
-    // Agregar un producto cancela cualquier otro modo: no tiene sentido
-    // abrir el formulario de alta encima del panel de borrado.
-    resetActionMode();
-
     editingProduct = null;
     act = "addProduct";
     myInventaryActions('addProduct');
-});
-
-editProductBt.addEventListener("click", () => {
-    // Un segundo clic en el boton sale del modo.
-    if (act === "editProduct") {
-        resetActionMode();
-        return;
-    }
-
-    resetActionMode();
-
-    act = "editProduct";
-    editingProduct = null;
-    updateActionMode();
-    syncActionsBar();
 });
 
 historyBt.addEventListener("click", () => {
@@ -4077,17 +4143,32 @@ historyBt.addEventListener("click", () => {
     myInventaryActions('history');
 });
 
+// Desplaza la página hasta una sección de la landing.
+// Se usa window.scrollTo con la posición calculada a mano en vez de
+// scrollIntoView: así el scroll va al documento y no a un contenedor
+// interno que pueda interceptarlo.
+function scrollToLandingSection(section) {
+    if (!section) return;
+
+    const inicio = section.getBoundingClientRect().top + window.scrollY;
+
+    window.scrollTo({
+        top: inicio,
+        behavior: "smooth"
+    });
+}
+
 // --- Bienvenida / landing (MenúStock) ---
 welcomeGetStartedBt.addEventListener("click", enterApp);
 welcomeMakeItYoursBt.addEventListener("click", enterApp);
 welcomeFinalCtaBt.addEventListener("click", enterApp);
 
 welcomeLearnBt.addEventListener("click", () => {
-    aboutSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToLandingSection(aboutSection);
 });
 
 welcomeOriginBt.addEventListener("click", () => {
-    originSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToLandingSection(originSection);
 });
 
 // Volver a la Welcome page desde dentro de la app, sin cerrar

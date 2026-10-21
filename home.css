@@ -435,45 +435,32 @@ select.inp:focus {
    BARRA DE ACCIONES
    ========================================================= */
 
+/* La barra inferior es mínima: solo la acción principal.
+   Las acciones de cada producto viven en su menú ⋮, así el catálogo
+   gana el espacio vertical. */
 .actions {
     width: 100%;
 
-    margin-top: 0.8rem;
-    padding: 0.9rem clamp(0.9rem, 4vw, 1.4rem);
-
-    background: linear-gradient(135deg, var(--oxblood-deep) 0%, var(--oxblood) 100%);
-    border-radius: var(--radius-lg);
-
-    box-shadow: 0 10px 26px rgba(20, 8, 10, 0.24);
+    margin-top: 0.4rem;
 
     display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-}
-
-/* La fila secundaria: tres botones al 33% */
-.actionsRow {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.6rem;
-
-    width: 100%;
+    justify-content: flex-end;
 }
 
 .actBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
 
-    min-height: 2.9rem;
-    padding: 0 1.1rem;
+    height: 44px;
+    padding: 0 1.3rem;
 
     border: 1px solid transparent;
     border-radius: 999px;
 
     font: inherit;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     font-weight: 700;
     text-align: center;
 
@@ -484,76 +471,25 @@ select.inp:focus {
 }
 
 .actBtn .actIcon {
-    font-size: 1rem;
+    font-size: 0.95rem;
     line-height: 1;
 }
 
-/* Agregar producto: la acción principal, ocupa la fila completa */
-.actBtnWide {
-    width: 100%;
-}
-
-/* Agregar: relleno rust, la que más se usa */
+/* Agregar: la única acción de la barra, en terracota */
 .actBtnPrimary {
     background: var(--rust);
     color: var(--white);
     border-color: var(--rust);
 
-    box-shadow: 0 6px 16px rgba(182, 80, 47, 0.3);
+    box-shadow: 0 4px 12px rgba(182, 80, 47, 0.26);
 }
 
 .actBtnPrimary:hover {
     background: var(--rust-dark);
     border-color: var(--rust-dark);
 
-    transform: translateY(-2px);
-    box-shadow: 0 9px 22px rgba(182, 80, 47, 0.36);
-}
-
-/* Cambiar precio: secundaria, solo contorno */
-.actBtnGhost {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--paper);
-    border-color: rgba(230, 170, 140, 0.34);
-}
-
-.actBtnGhost:hover {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: var(--paper);
-
-    transform: translateY(-2px);
-}
-
-/* Eliminar: destructiva, se ve distinta de las otras dos */
-.actBtnDanger {
-    background: transparent;
-    color: #e9a79c;
-    border-color: rgba(233, 167, 156, 0.4);
-}
-
-.actBtnDanger:hover {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: var(--white);
-
-    transform: translateY(-2px);
-}
-
-/* Modo activo: el botón que está esperando que elijas productos */
-.actBtn.active {
-    background: var(--marigold);
-    border-color: var(--marigold);
-    color: var(--oxblood-deep);
-
-    box-shadow: 0 6px 18px rgba(214, 138, 52, 0.38);
-}
-
-.actBtnDanger.active {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: var(--white);
-
-    box-shadow: 0 6px 18px rgba(154, 61, 52, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(182, 80, 47, 0.32);
 }
 
 .actBtn:active {
@@ -562,89 +498,255 @@ select.inp:focus {
 
 
 /* =========================================================
-   AVISO DE MODO
-   Dice en qué acción estás y cómo salir de ella.
+   CASILLA DE SELECCIÓN Y MENÚ DE ACCIONES POR TARJETA
    ========================================================= */
 
-.modeBanner {
+.cardSelect {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.55rem;
+
+    width: 1.15rem;
+    height: 1.15rem;
+
+    accent-color: var(--rust);
+
+    cursor: pointer;
+
+    opacity: 0.3;
+    transition: opacity var(--transition);
+}
+
+.productCard:hover .cardSelect,
+.cardSelect:checked {
+    opacity: 1;
+}
+
+.cardMenuBtn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+
+    width: 1.9rem;
+    height: 1.9rem;
+
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    justify-content: center;
 
-    padding: 0.7rem 0.9rem;
+    border: none;
+    border-radius: 50%;
+
+    background: rgba(42, 27, 22, 0.07);
+    color: var(--ink-soft);
+
+    font-size: 1rem;
+    line-height: 1;
+
+    cursor: pointer;
+
+    opacity: 0;
+    transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+
+.productCard:hover .cardMenuBtn,
+.cardMenuBtn[aria-expanded="true"],
+.cardMenuBtn:focus-visible {
+    opacity: 1;
+}
+
+.cardMenuBtn:hover {
+    background: var(--rust);
+    color: var(--white);
+}
+
+/* En pantallas tactiles no hay hover: el boton siempre visible */
+@media (hover: none) {
+    .cardMenuBtn,
+    .cardSelect {
+        opacity: 1;
+    }
+}
+
+.cardMenu {
+    position: absolute;
+    top: 2.4rem;
+    right: 0.4rem;
+
+    z-index: 30;
+
+    min-width: 200px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    padding: 6px;
 
     background: var(--white);
     border: 1px solid var(--beige-light);
-    border-left: 4px solid var(--marigold);
     border-radius: var(--radius-md);
 
-    box-shadow: var(--shadow-soft);
-
-    font-size: 0.86rem;
+    box-shadow: var(--shadow-card);
 }
 
-.modeBanner.hidden {
+.cardMenu[hidden] {
+    display: none;
+}
+
+.cardMenuItem {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+
+    border: none;
+    border-radius: var(--radius-sm);
+
+    background: none;
+    color: var(--ink);
+
+    font: inherit;
+    font-size: 0.83rem;
+    font-weight: 600;
+    text-align: left;
+
+    cursor: pointer;
+
+    transition: background var(--transition), color var(--transition);
+}
+
+.cardMenuItem:hover {
+    background: var(--paper);
+}
+
+.cardMenuItemDanger {
+    color: var(--danger);
+}
+
+.cardMenuItemDanger:hover {
+    background: #f8ece9;
+}
+
+
+/* =========================================================
+   BARRA FLOTANTE DE SELECCIÓN
+   Aparece al marcar productos: permite actuar sobre varios.
+   ========================================================= */
+
+.selectionBar {
+    position: fixed;
+    left: 50%;
+    bottom: 1rem;
+
+    transform: translateX(-50%);
+
+    z-index: 800;
+
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+
+    padding: 0.55rem 0.9rem;
+
+    background: var(--ink);
+    border-radius: 999px;
+
+    box-shadow: var(--shadow-heavy);
+
+    color: var(--paper);
+}
+
+.selectionBar.hidden {
     display: none !important;
 }
 
-.modeBanner.danger {
-    border-left-color: var(--danger);
+.selectionCount {
+    padding-left: 0.4rem;
+
+    font-size: 0.84rem;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
-.modeBannerIcon {
-    flex-shrink: 0;
-
-    font-size: 1.05rem;
-    line-height: 1;
+.selectionActions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
 }
 
-.modeBannerText {
-    flex: 1;
+.selBt {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 
-    color: var(--ink);
-    font-weight: 600;
-    line-height: 1.35;
-}
+    padding: 0.45rem 0.85rem;
 
-.modeCancelBt {
-    flex-shrink: 0;
-
-    padding: 0.38rem 0.8rem;
-
-    border: 1px solid var(--beige);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 999px;
 
-    background: var(--paper);
-    color: var(--ink-soft);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--paper);
 
     font: inherit;
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     font-weight: 700;
 
     cursor: pointer;
 
-    transition: background var(--transition), color var(--transition), border-color var(--transition);
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
 
-.modeCancelBt:hover {
-    background: #f8ece9;
+.selBt:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.selBtDanger {
+    color: #f0b3aa;
+    border-color: rgba(240, 179, 170, 0.35);
+}
+
+.selBtDanger:hover {
+    background: var(--danger);
     border-color: var(--danger);
-    color: var(--danger);
+    color: var(--white);
 }
 
-.modeCancelBt kbd {
-    display: inline-block;
+.selCancelBt {
+    padding: 0.45rem 0.85rem;
 
-    padding: 0.02rem 0.3rem;
+    border: none;
+    border-radius: 999px;
 
-    border: 1px solid var(--beige);
-    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--paper);
 
-    background: var(--white);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
 
-    font-family: inherit;
-    font-size: 0.7rem;
+    cursor: pointer;
+
+    transition: background var(--transition);
 }
+
+.selCancelBt:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Cuando hay productos marcados, la barra flotante no debe
+   tapar la barra de acciones de abajo. */
+.main.selectionOpen {
+    padding-bottom: 5.5rem;
+}
+
+/* =========================================================
+   BARRA FLOTANTE DE SELECCIÓN (fin)
+   ========================================================= */
 
 
 /* =========================================================
@@ -1780,19 +1882,17 @@ li:focus-visible {
     }
 
     .actions {
-        padding: 0.7rem 0.65rem;
+        justify-content: stretch;
     }
 
     .actBtn {
-        min-height: 2.75rem;
+        width: 100%;
 
-        padding: 0 0.55rem;
+        height: 44px;
 
-        font-size: 0.78rem;
-    }
+        padding: 0 0.9rem;
 
-    .actionsRow {
-        grid-template-columns: 1fr;
+        font-size: 0.84rem;
     }
 
     .productFormModal {
@@ -1812,6 +1912,35 @@ li:focus-visible {
 
     .actBtn .actIcon {
         font-size: 0.95rem;
+    }
+
+    /* La barra flotante ocupa el ancho casi completo en el celular */
+    .selectionBar {
+        left: 0.6rem;
+        right: 0.6rem;
+        bottom: 0.6rem;
+
+        transform: none;
+
+        justify-content: space-between;
+        gap: 0.5rem;
+
+        border-radius: var(--radius-lg);
+    }
+
+    .selectionActions {
+        flex: 1;
+        justify-content: flex-end;
+    }
+
+    .selBt {
+        padding: 0.45rem 0.7rem;
+        font-size: 0.76rem;
+    }
+
+    .selCancelBt {
+        padding: 0.45rem 0.6rem;
+        font-size: 0.76rem;
     }
 
     #modali {
@@ -3772,44 +3901,6 @@ li:focus-visible {
     box-shadow: 0 0 0 3px rgba(214, 138, 52, 0.26), var(--shadow-card);
 }
 
-.productCard.selected::after {
-    content: "✓";
-
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    width: 1.5rem;
-    height: 1.5rem;
-
-    border-radius: 50%;
-
-    background: var(--marigold);
-    color: var(--oxblood-deep);
-
-    font-size: 0.78rem;
-    font-weight: 800;
-
-    box-shadow: 0 2px 7px rgba(20, 10, 12, 0.28);
-}
-
-/* En modo eliminar, el marcado va en rojo */
-#productList.modeDelete .productCard.selected {
-    border-color: var(--danger);
-    border-left-color: var(--danger);
-
-    box-shadow: 0 0 0 3px rgba(154, 61, 52, 0.24), var(--shadow-card);
-}
-
-#productList.modeDelete .productCard.selected::after {
-    background: var(--danger);
-    color: var(--white);
-}
-
 /* Dentro de la tarjeta, los 4 modos de variante caben en una fila */
 .productFormModal .clothingProductBlock .storeTypeGrid {
     grid-template-columns: repeat(4, 1fr);
@@ -3899,4 +3990,83 @@ li:focus-visible {
     background: var(--paper);
     border-color: var(--rust-light);
     color: var(--ink);
+}
+
+/* =========================================================
+   FORMULARIO DE NUEVO PERFIL
+   ========================================================= */
+
+.profileForm {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.profileFormRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.profileFormLabel {
+    color: var(--ink-soft);
+
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.colorPicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+
+    margin-top: 0.1rem;
+}
+
+.colorSwatch {
+    width: 2rem;
+    height: 2rem;
+
+    border: 2px solid transparent;
+    border-radius: 50%;
+
+    cursor: pointer;
+
+    box-shadow: 0 2px 6px rgba(42, 27, 22, 0.18);
+
+    transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+
+.colorSwatch:hover {
+    transform: scale(1.12);
+}
+
+.colorSwatch.selected {
+    border-color: var(--white);
+    box-shadow: 0 0 0 2px var(--ink), 0 2px 8px rgba(42, 27, 22, 0.24);
+}
+
+
+/* Nombre del negocio bajo el tipo de tienda */
+.profileBusiness {
+    display: block;
+
+    margin-top: 0.15rem;
+
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.profileEmpty {
+    padding: 1.5rem 1rem;
+
+    border: 1px dashed var(--beige);
+    border-radius: var(--radius-md);
+
+    color: var(--ink-mute);
+    text-align: center;
+    font-size: 0.9rem;
+    line-height: 1.5;
 }

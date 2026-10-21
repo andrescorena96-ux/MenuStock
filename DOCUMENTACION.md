@@ -168,26 +168,23 @@ El botón de perfil abre un menú con: *Cambiar perfil*, *Cambiar nombre*, *Expo
 
 ### 6.1 Barra de acciones
 
-La barra inferior tiene **cuatro acciones**, con jerarquía visual:
+La barra inferior es **mínima**: una sola acción, en una tira delgada sin el bloque vinotinto gigante de antes.
 
-- **Agregar producto** — botón principal, ocupa la **fila completa**. Es la acción más frecuente del dueño (dar de alta productos), así que tiene el mayor peso visual: relleno terracota, icono ＋.
-- **Editar producto** — secundaria, solo contorno, icono ✏️. Abre el formulario completo del producto.
-- **Cambiar precio** — secundaria, solo contorno, icono 🏷️. Atajo para cambiar **solo** el precio de varios productos seguidos.
-- **Eliminar producto** — destructiva, se ve en rojo, icono 🗑️.
+- **Agregar producto** — botón principal de 44 px, alineado a la derecha, en terracota, con icono ＋.
 
-La diferencia entre *Editar producto* y *Cambiar precio*: el primero abre el formulario completo (nombre, precio, imagen, stock, categoría, subcategoría y variantes); el segundo es el atajo para cambiar únicamente el precio de una lista de productos, sin salir del modo.
+El objetivo es **maximizar el espacio para el catálogo**. Las acciones específicas de cada producto ya no viven en la barra, sino **en la propia tarjeta**.
 
-Las tres son `<button>` reales (antes eran `<li>` con `role="button"`), con iconos y con foco visible.
+**Menú ⋮ por tarjeta.** Cada tarjeta tiene un botón de tres puntos en su esquina superior derecha (aparece al pasar el mouse; en pantallas táctiles siempre está visible). Al abrirlo sale un menú con:
 
-**Modos de acción.** "Cambiar precio" y "Eliminar producto" son *modos*: pulsarlos pone la app a la espera de que el usuario elija los productos. Para que el modo nunca sea invisible:
+- ✏️ **Editar producto** — abre el formulario completo del producto.
+- 🏷️ **Cambiar precio** — abre un diálogo con el precio nuevo.
+- 🗑️ **Eliminar producto** — pide confirmación y lo borra.
 
-- Un **aviso arriba de la lista** dice qué está pasando y trae su propio botón *Cancelar* (también `Esc`).
-- El botón del modo activo queda **marcado** en marigold (o rojo, en el caso de eliminar).
-- Las **tarjetas elegidas se resaltan** con un borde de color y un ✓.
-- Al **cambiar de vista** o **cambiar de perfil**, el modo se cancela solo: nunca queda pendiente de un perfil anterior.
-- El aviso es **rojo** en modo eliminar y normal en modo cambiar precio.
+El clic en la tarjeta sigue significando lo de siempre: **sumar el producto a la cuenta**.
 
-Mientras el panel de la cuenta está abierto (venta, cambio de precio o eliminación), **la barra se oculta**: el panel ocupa su lugar y tiene sus propios botones de Aceptar y Cancelar.
+**Selección múltiple.** Cada tarjeta tiene una casilla en su esquina superior izquierda. Al marcar una o más aparece una **barra flotante** abajo con el número de productos marcados y las acciones *Editar*, *Cambiar precio*, *Eliminar* y *Cancelar*. Sirve para cambiar el precio de veinte productos o borrar cinco de un tirón.
+
+Mientras el panel de la cuenta está abierto, la barra se oculta: el panel ocupa su lugar y tiene sus propios botones.
 
 ### 6.2 Editar un producto
 
@@ -249,7 +246,21 @@ En móvil la rejilla pasa a una columna y los botones ocupan el ancho completo.
 
 En tienda de ropa, debajo del bloque principal aparecen los **4 modos de variante** (en una sola fila), las casillas de tallas y los detalles opcionales (temporada, colección, serie, proveedor).
 
-### 6.4 Perfiles y contraseñas
+### 6.4 Crear un perfil
+
+El alta de perfil es un flujo de pasos:
+
+1. **Tipo de negocio** — *Tienda General*, *Tienda de Ropa* u *Otro*.
+2. Si es *Tienda de Ropa*, el **sistema de tallas**: *letra* (XS–XXL automático), *numérica*, *de calzado* o *personalizada* (en estos tres el usuario escribe su lista separada por comas).
+3. **Formulario del perfil**: nombre del perfil, nombre del negocio (opcional), **color** y **contraseña (opcional)**.
+
+El formulario es un diálogo propio de MenúStock, no los diálogos del navegador. Eligiendo un color se le da personalidad al perfil: la inicial aparece en un círculo de ese color en la lista de perfiles, en el botón de la cabecera y en el menú de perfil.
+
+**La contraseña ahora es opcional.** Si se deja vacía, el perfil se abre sin pedir contraseña — útil cuando el negocio comparte el dispositivo y el dueño no quiere que se pregunte la clave cada vez.
+
+Una tienda de ropa nueva además nace con dos categorías sugeridas (*Hombre*, *Mujer*), cada una con subcategorías, que el usuario puede renombrar, borrar o ampliar.
+
+### 6.5 Perfiles y contraseñas
 
 - Multiperfil en un mismo dispositivo, cada uno con datos completamente aislados.
 - Contraseña por perfil, guardada en texto plano (ver *Límites*).
@@ -257,18 +268,18 @@ En tienda de ropa, debajo del bloque principal aparecen los **4 modos de variant
 - Se puede renombrar un perfil (con validación de duplicados) o cambiar de perfil en cualquier momento.
 - Al crear el perfil se elige el **tipo de negocio**, que adapta la app: una tienda de ropa habilita tallas, colores y variantes.
 
-### 6.5 Inventario
+### 6.6 Inventario
 
 - Alta de productos con nombre, precio, imagen (URL), stock inicial, categoría y subcategoría.
 - **Imagen por URL** con validación: solo se aceptan `http(s)` y `data:image/*`. Si la URL no es válida o falta, se usa una imagen de relleno.
 - Si el producto no tiene categoría, aparece en la tarjeta "Sin categoría" de la vista de categorías (sirve para los productos que ya existían antes de las categorías).
 - La grilla de producto muestra: imagen, nombre, precio, stock, etiqueta de categoría y —en ropa— resumen de tallas y colores.
 
-### 6.6 Búsqueda y filtros
+### 6.7 Búsqueda y filtros
 
 Cuatro modos, conmutables desde un desplegable: **nombre**, **precio máximo**, **precio mínimo**, **cantidad en stock**. Al cambiar de modo el campo se reconfigura solo (tipo `text` o `number`) y el placeholder se adapta. La búsqueda se aplica sobre los productos **visibles en la categoría actual**, no sobre todo el catálogo.
 
-### 6.7 Categorías y subcategorías
+### 6.8 Categorías y subcategorías
 
 - Árbol de dos niveles: categoría → subcategorías.
 - Crear, renombrar y eliminar, tanto categorías como subcategorías.
@@ -276,7 +287,7 @@ Cuatro modos, conmutables desde un desplegable: **nombre**, **precio máximo**, 
 - **Al eliminar una categoría, los productos no se borran**: quedan como "Sin categoría". Al eliminar una subcategoría, los productos permanecen en su categoría. Nunca se pierde inventario por reorganizar.
 - **Migas de pan** para volver a la raíz o a la categoría padre.
 
-### 6.8 Reposición (Restock)
+### 6.9 Reposición (Restock)
 
 El módulo más elaborado de la app, porque el stock de un negocio real no siempre entra por unidades.
 
@@ -307,7 +318,7 @@ Ninguno      · -3       →  descuenta 3 unidades (sin conversión)
 - **Preferencia de empaque por producto**: se recuerda el empaque usado la última vez.
 - **Validación en dos pasos**: primero se revisan todas las filas y solo después se aplica nada. Antes se modificaba sobre la marcha y una fila inválida dejaba la mitad del cambio aplicada.
 
-### 6.9 Compras a proveedores
+### 6.10 Compras a proveedores
 
 El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta.
 
@@ -317,7 +328,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Detalle**: cada compra se puede abrir en un diálogo con su fecha, sus renglones y su total.
 - **Anular**: devuelve el stock y deja un movimiento `purchaseVoid`. La compra **no se borra** — queda marcada como anulada, para no perder la trazabilidad.
 
-### 6.10 Cuenta y venta
+### 6.11 Cuenta y venta
 
 - Se arma haciendo clic en las tarjetas de producto.
 - El panel inferior (panel de cuenta) muestra cada renglón con cantidad, precio y subtotal, más el total general.
@@ -326,7 +337,7 @@ El lado "comprar": lo que **entra** al negocio, además de lo que sale por venta
 - **Validación de stock antes de cobrar**: si no hay unidades suficientes, la venta se cancela y se dice exactamente qué producto falta y cuántas unidades. El inventario nunca queda en negativo.
 - El historial de ventas guarda renglones estructurados (`id`, `nombre`, `precio`, `cantidad`), total y fecha.
 
-### 6.11 Historial de inventario
+### 6.12 Historial de inventario
 
 Registro cronológico de **todo** movimiento de stock, del más reciente al más antiguo.
 
@@ -346,7 +357,7 @@ El historial **no inventa el pasado**: el stock que ya existía antes de activar
 
 Se conservan hasta **1.000 movimientos** por perfil, y los más antiguos se descartan para que `localStorage` no crezca sin límite.
 
-### 6.12 Tienda de ropa: variantes
+### 6.13 Tienda de ropa: variantes
 
 Un producto de ropa puede manejarse de cuatro maneras:
 
@@ -359,7 +370,7 @@ Un producto de ropa puede manejarse de cuatro maneras:
 
 El stock total del producto es la suma de sus variantes. La tarjeta muestra un resumen (`Tallas: S, M, L · Colores: Negro, Blanco`).
 
-### 6.13 Exportar e importar datos
+### 6.14 Exportar e importar datos
 
 Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el inventario.
 
@@ -367,7 +378,7 @@ Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el 
 - **Importar** → reemplaza los datos del perfil actual con los del archivo, previa confirmación.
 - **La contraseña nunca se exporta ni se importa**: es un secreto y debe quedarse solo en el dispositivo.
 
-### 6.14 Sistema de diálogos
+### 6.15 Sistema de diálogos
 
 La app **no usa `prompt()`, `alert()` ni `confirm()` nativos**: bloquean la pantalla, no admiten formato y rompen el diseño. Hay una capa propia con tres funciones que son promesas:
 
@@ -381,7 +392,7 @@ await showPrompt({ title, label, validate });   // pedir un dato -> string o nul
 
 Se cierran con **Escape** o haciendo clic en el fondo. El foco va solo al primer campo. Los diálogos de confirmación destructiva se pintan en color de peligro.
 
-### 6.15 Landing page
+### 6.16 Landing page
 
 Ocho secciones: hero, sobre nosotros, misión, historia, lo que ofrece, pensado para tu negocio, transición y mensaje final.
 
@@ -492,7 +503,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-**103 casos**, todos en verde:
+**108 casos**, todos en verde:
 
 - Arranque: carga del módulo, perfiles por defecto, landing, entrada a la app
 - Sistema de diálogos: apertura, validación que impide confirmar un valor vacío, encadenado de diálogos

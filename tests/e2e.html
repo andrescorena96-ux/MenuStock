@@ -129,18 +129,58 @@ function waitForForm() {
     );
 }
 
-// Abre el editor de un producto: se asegura de que el modo este
-// activo (un clic en el boton lo alterna) y abre el primer producto.
-async function openEditor() {
-    if (document.getElementById("editProduct").classList.contains("active")) {
-        click("#editProduct");
-        await new Promise(r => setTimeout(r, 80));
-    }
-    click("#editProduct");
-    await new Promise(r => setTimeout(r, 80));
+// Rellena el formulario de nuevo perfil y lo confirma.
+async function fillProfileForm({ nombre, negocio, password, color = 1 }) {
+    await waitFor(dialogOpen);
 
-    click(".productCard");
+    if (nombre !== undefined) document.getElementById("profileNameInput").value = nombre;
+    if (negocio !== undefined) document.getElementById("profileBusinessInput").value = negocio;
+    if (password !== undefined) document.getElementById("profilePasswordInput").value = password;
+
+    const swatches = document.querySelectorAll(".colorSwatch");
+    if (swatches[color]) swatches[color].click();
+
+    const buttons = document.querySelectorAll("#dialogActions button");
+    buttons[buttons.length - 1].click();
+
+    await new Promise(r => setTimeout(r, 200));
+}
+
+// Abre el menu ⋮ de una tarjeta.
+async function openCardMenu(index = 0) {
+    const cards = document.querySelectorAll(".productCard");
+    if (!cards[index]) throw new Error("No hay tarjeta " + index);
+
+    cards[index].querySelector(".cardMenuBtn").click();
+    await new Promise(r => setTimeout(r, 80));
+}
+
+// Pulsa una opcion del menu ⋮ de la tarjeta. Ojo: hay que buscar
+// el item DENTRO de esa tarjeta, no en todo el documento (cada tarjeta
+// tiene su propio menu).
+async function clickCardAction(action, index = 0) {
+    await openCardMenu(index);
+
+    const card = document.querySelectorAll(".productCard")[index];
+    const item = card.querySelector(`.cardMenuItem[data-card-action="${action}"]`);
+    if (!item) throw new Error("No existe la accion " + action);
+
+    item.click();
+    await new Promise(r => setTimeout(r, 120));
+}
+
+// Abre el editor de un producto desde su menu ⋮.
+async function openEditor(index = 0) {
+    await clickCardAction("edit", index);
     await waitForForm();
+}
+
+// Marca la casilla de una tarjeta.
+async function selectCard(index = 0) {
+    const cards = document.querySelectorAll(".productCard");
+    const check = cards[index].querySelector(".cardSelect");
+    check.click();
+    await new Promise(r => setTimeout(r, 100));
 }
 
 try {
@@ -194,29 +234,43 @@ try {
     await waitFor(dialogOpen);
     ok("Pedir un dato abre el dialogo de la app", dialogOpen());
     ok("El dialogo pide un nombre de perfil",
-        document.querySelector("#dialogInput") !== null);
+        document.getElementById("profileNameInput") !== null);
+    ok("El formulario de perfil deja elegir color",
+        document.querySelectorAll(".colorSwatch").length >= 6,
+        `${document.querySelectorAll(".colorSwatch").length} colores`);
 
     // Escribir vacio y aceptar: la validacion debe impedirlo.
-    document.querySelector("#dialogInput").value = "   ";
+    document.getElementById("profileNameInput").value = "   ";
     const buttons = document.querySelectorAll("#dialogActions button");
     buttons[buttons.length - 1].click();
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 150));
     ok("La validacion impide confirmar un nombre vacio",
-        dialogOpen() && document.getElementById("dialogError").textContent.length > 0,
-        document.getElementById("dialogError").textContent);
+        dialogOpen() && document.getElementById("profileFormError").textContent.length > 0,
+        document.getElementById("profileFormError").textContent);
 
     // Ahora si, con un nombre valido.
-    await answerDialog("Mi Tienda");
-    ok("El dialogo pide la contrasena del perfil",
-        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Contraseña"),
-        document.getElementById("dialogTitle").textContent);
-    await answerDialog("1234");
+    await fillProfileForm({
+        nombre: "Mi Tienda",
+        negocio: "Bodega Don Pepe",
+        password: "1234"
+    });
 
     ok("El perfil se crea y se entra a la app",
         document.getElementById("appRoot").classList.contains("hidden") === false);
     ok("El boton de perfil muestra el nombre",
         document.getElementById("profileButtonName").textContent.trim() === "Mi Tienda",
         document.getElementById("profileButtonName").textContent);
+
+    const perfilCreado = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda");
+    ok("El perfil guarda el nombre del negocio",
+        perfilCreado.profile.business === "Bodega Don Pepe",
+        perfilCreado.profile.business);
+    ok("El perfil guarda un color",
+        typeof perfilCreado.profile.color === "string" && perfilCreado.profile.color.length > 0,
+        perfilCreado.profile.color);
+    ok("El perfil guarda la contrasena",
+        perfilCreado.password === "1234");
 
     // =========================================================
     // Prueba de XSS: nombre con HTML malicioso
@@ -353,103 +407,182 @@ try {
         movs.map(m => `${m.action}:${m.change}`).join(", "));
 
     // =========================================================
-    // BARRA DE ACCIONES: modo visible + resaltado
+    // BARRA DE ACCIONES DELGADA + MENÚ POR TARJETA
     // =========================================================
     click("#productsBt");
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise(r => setTimeout(r, 80));
 
     ok("La barra de acciones esta en la vista de productos",
         !document.getElementById("actionsBar").classList.contains("hidden"));
-    ok("Agregar producto ocupa la fila completa",
-        document.getElementById("addProduct").classList.contains("actBtnWide"));
-    ok("Las tres acciones son botones de verdad",
-        document.getElementById("addProduct").tagName === "BUTTON" &&
-        document.getElementById("changePrice").tagName === "BUTTON" &&
-        document.getElementById("delProduct").tagName === "BUTTON");
+    ok("La barra inferior solo tiene la accion principal",
+        document.querySelectorAll("#actionsBar button").length === 1 &&
+        document.getElementById("addProduct") !== null);
+    ok("Las acciones viejas se quitaron de la barra",
+        document.getElementById("editProduct") === null &&
+        document.getElementById("changePrice") === null &&
+        document.getElementById("delProduct") === null);
+    ok("La barra flotante de seleccion arranca oculta",
+        document.getElementById("selectionBar").classList.contains("hidden"));
 
-    // Modo "cambiar precio"
-    ok("El aviso de modo arranca oculto",
-        document.getElementById("modeBanner").classList.contains("hidden"));
+    // --- Menú ⋮ de cada tarjeta ---
+    ok("Cada tarjeta tiene su boton de menu",
+        document.querySelectorAll(".productCard .cardMenuBtn").length ===
+        document.querySelectorAll(".productCard").length);
+    ok("Cada tarjeta tiene su casilla de seleccion",
+        document.querySelectorAll(".productCard .cardSelect").length ===
+        document.querySelectorAll(".productCard").length);
 
-    click("#changePrice");
-    await new Promise(r => setTimeout(r, 60));
+    await openCardMenu(0);
+    const menuAbierto = document.querySelectorAll(".productCard")[0].querySelector(".cardMenu");
+    ok("El menu ⋮ se abre con las tres acciones",
+        !menuAbierto.hidden &&
+        menuAbierto.querySelectorAll(".cardMenuItem").length === 3,
+        [...menuAbierto.querySelectorAll(".cardMenuItem")].map(b => b.textContent.trim()).join(" | "));
 
-    ok("El aviso de modo aparece al elegir una accion",
-        !document.getElementById("modeBanner").classList.contains("hidden"));
-    ok("El aviso dice que estas cambiando precios",
-        document.getElementById("modeBannerText").textContent.includes("cambiando precios"),
-        document.getElementById("modeBannerText").textContent);
-    ok("El boton de la accion activa queda marcado",
-        document.getElementById("changePrice").classList.contains("active"));
+    // Clic fuera cierra el menu
+    document.getElementById("productsTitle").click();
+    await new Promise(r => setTimeout(r, 80));
+    ok("El menu se cierra al hacer clic fuera",
+        document.querySelector(".productCard .cardMenu").hidden);
 
-    // Elegir un producto lo resalta
-    click(".productCard");
-    await new Promise(r => setTimeout(r, 60));
-    ok("El producto elegido se resalta",
-        document.querySelectorAll(".productCard.selected").length === 1,
-        `${document.querySelectorAll(".productCard.selected").length} resaltados`);
-
-    // Escape sale del modo
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await new Promise(r => setTimeout(r, 60));
-
-    ok("Escape sale del modo de accion",
-        document.getElementById("modeBanner").classList.contains("hidden") &&
-        !document.getElementById("changePrice").classList.contains("active"));
-    ok("Al salir del modo se quita el resaltado",
-        document.querySelectorAll(".productCard.selected").length === 0);
-
-    // Modo "eliminar": el aviso va en rojo y el resaltado tambien
-    click("#delProduct");
-    await new Promise(r => setTimeout(r, 60));
-    ok("El modo eliminar avisa en color de peligro",
-        document.getElementById("modeBanner").classList.contains("danger"));
-    ok("La lista de productos marca el modo eliminar",
-        document.getElementById("productList").classList.contains("modeDelete"));
-
-    click(".productCard");
-    await new Promise(r => setTimeout(r, 60));
-    ok("En modo eliminar el producto tambien se resalta",
+    // --- Casilla y barra flotante ---
+    await selectCard(0);
+    ok("Al marcar un producto aparece la barra flotante",
+        !document.getElementById("selectionBar").classList.contains("hidden"));
+    ok("La barra flotante cuenta los productos marcados",
+        document.getElementById("selectionCount").textContent.includes("1 producto"),
+        document.getElementById("selectionCount").textContent);
+    ok("La tarjeta marcada se resalta",
         document.querySelectorAll(".productCard.selected").length === 1);
 
-    // El boton "Cancelar" del aviso sale del modo
-    click("#modeCancelBt");
-    await new Promise(r => setTimeout(r, 60));
-    ok("El boton Cancelar del aviso sale del modo",
-        document.getElementById("modeBanner").classList.contains("hidden") &&
-        !document.getElementById("delProduct").classList.contains("active"));
+    await selectCard(1);
+    ok("La barra flotante cuenta dos productos",
+        document.getElementById("selectionCount").textContent.includes("2 productos"),
+        document.getElementById("selectionCount").textContent);
 
-    // Cambiar de vista tambien sale del modo
-    click("#delProduct");
-    await new Promise(r => setTimeout(r, 60));
-    ok("El modo eliminar queda activo",
-        !document.getElementById("modeBanner").classList.contains("hidden"));
+    click("#selCancelBt");
+    await new Promise(r => setTimeout(r, 100));
+    ok("Cancelar quita las marcas y esconde la barra",
+        document.getElementById("selectionBar").classList.contains("hidden") &&
+        document.querySelectorAll(".productCard.selected").length === 0);
 
-    click("#categoriesBt");
-    await new Promise(r => setTimeout(r, 60));
-    ok("Cambiar de vista sale del modo de accion",
-        document.getElementById("modeBanner").classList.contains("hidden") &&
-        !document.getElementById("delProduct").classList.contains("active"));
-    ok("La barra de acciones se oculta en la vista de categorias",
-        document.getElementById("actionsBar").classList.contains("hidden"));
+    // --- Acciones del menú ⋮ ---
+    // Se crean productos propios: las pruebas de abajo usan otros
+    // productos y no deben verse afectados.
+    for (const [nombre, precio, stock] of [["Temporal Uno", "1000", "3"], ["Temporal Dos", "2000", "4"]]) {
+        click("#addProduct");
+        await waitFor(() => document.getElementById("newName") !== null);
+        setValue("#newName", nombre);
+        setValue("#nprice", precio);
+        setValue("#nstock", stock);
+        click("#inventaryConfirmBt");
+        await acceptDialog();
+    }
 
-    click("#productsBt");
-    await new Promise(r => setTimeout(r, 60));
-    ok("La barra de acciones vuelve en la vista de productos",
-        !document.getElementById("actionsBar").classList.contains("hidden"));
+    const indiceDe = (nombre) => [...document.querySelectorAll(".productCard")]
+        .findIndex(c => c.querySelector("h3").textContent === nombre);
+
+    const idxUno = indiceDe("Temporal Uno");
+    const idxDos = indiceDe("Temporal Dos");
+
+    // Cambiar precio desde el menú ⋮
+    await clickCardAction("price", idxUno);
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("precio")
+    );
+    ok("El menu ⋮ abre el dialogo de cambiar precio",
+        document.getElementById("dialogTitle").textContent.includes("precio"),
+        document.getElementById("dialogTitle").textContent);
+
+    document.getElementById("dialogInput").value = "1234";
+    document.querySelectorAll("#dialogActions button")[1].click();
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Precio actualizado")
+    );
+    await acceptDialog();
+
+    const precioTemporal = Number(
+        [...document.querySelectorAll(".productCard")]
+            .find(c => c.querySelector("h3").textContent === "Temporal Uno")
+            .querySelector(".productInfo p").textContent.replace("$", "")
+    );
+    ok("Cambiar precio desde el menu actualiza el producto",
+        precioTemporal === 1234, `precio = ${precioTemporal}`);
+
+    // Eliminar desde el menú ⋮
+    await clickCardAction("delete", idxDos);
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Eliminar")
+    );
+    ok("El menu ⋮ pide confirmacion antes de eliminar",
+        document.getElementById("dialogTitle").textContent.includes("Eliminar"),
+        document.getElementById("dialogTitle").textContent);
+
+    await acceptDialog();
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Eliminado")
+    );
+    await acceptDialog();
+
+    ok("Eliminar desde el menu borra el producto",
+        indiceDe("Temporal Dos") === -1,
+        `quedan ${document.querySelectorAll(".productCard").length} tarjetas`);
+
+    // --- Acciones en bloque con la barra flotante ---
+    await selectCard(indiceDe("Temporal Uno"));
+    await selectCard(indiceDe("Gaseosa") >= 0 ? indiceDe("Gaseosa") : 0);
+    ok("La barra flotante muestra las dos acciones",
+        document.getElementById("selPriceBt") !== null &&
+        document.getElementById("selDeleteBt") !== null);
+
+    click("#selPriceBt");
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("precio")
+    );
+    document.getElementById("dialogInput").value = "500";
+    document.querySelectorAll("#dialogActions button")[1].click();
+
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Precio actualizado")
+    );
+    await acceptDialog();
+
+    const precios500 = [...document.querySelectorAll(".productCard .productInfo p")]
+        .map(p => Number(p.textContent.replace("$", "")))
+        .filter(p => p === 500).length;
+    ok("Cambiar precio en bloque aplica a todos los marcados",
+        precios500 === 2, `${precios500} productos con precio 500`);
+
+    // Se limpia: el producto temporal se elimina y el precio vuelve
+    await clickCardAction("delete", indiceDe("Temporal Uno"));
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Eliminar")
+    );
+    await acceptDialog();
+    await waitFor(() =>
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Eliminado")
+    );
+    await acceptDialog();
+
+    ok("Los productos de prueba se eliminaron",
+        indiceDe("Temporal Uno") === -1 && indiceDe("Temporal Dos") === -1);
 
     // =========================================================
     // EDITAR PRODUCTO (cambiar categoría y subcategoría)
     // =========================================================
-    click("#editProduct");
-    await new Promise(r => setTimeout(r, 60));
+    // Se abre el formulario desde el menú ⋮ de la tarjeta
+    await openEditor(0);
 
-    ok("El modo editar avisa que estas editando",
-        !document.getElementById("modeBanner").classList.contains("hidden") &&
-        document.getElementById("modeBannerText").textContent.includes("editando"),
-        document.getElementById("modeBannerText").textContent);
-    ok("El boton Editar producto queda marcado",
-        document.getElementById("editProduct").classList.contains("active"));
+    ok("El formulario de edicion se abre desde el menu de la tarjeta",
+        document.getElementById("modalTitle").textContent.includes("Editar"),
+        document.getElementById("modalTitle").textContent);
+
+    const precioGaseosa = Number(
+        [...document.querySelectorAll(".productCard")]
+            .find(c => c.querySelector("h3").textContent.startsWith("Gaseosa"))
+            .querySelector(".productInfo p").textContent.replace("$", "")
+    );
 
     // Al hacer clic en un producto se abre el formulario con sus datos
     click(".productCard");
@@ -459,8 +592,8 @@ try {
         document.getElementById("newName").value.startsWith("Gaseosa"),
         document.getElementById("newName").value);
     ok("El formulario de edicion se abre con el precio del producto",
-        document.getElementById("nprice").value === "2500",
-        document.getElementById("nprice").value);
+        document.getElementById("nprice").value === String(precioGaseosa),
+        `${document.getElementById("nprice").value} (esperado ${precioGaseosa})`);
     ok("El formulario de edicion se abre con el stock del producto",
         document.getElementById("nstock").value === "9",
         document.getElementById("nstock").value);
@@ -503,9 +636,7 @@ try {
         `categoria = ${editado.category} | esperado = ${categoriaBebidas.id}`);
     ok("El producto cambia de subcategoria", editado.subcategory === subcategoriaGaseosas.id,
         `subcategoria = ${editado.subcategory} | esperado = ${subcategoriaGaseosas.id}`);
-    ok("Tras editar se sigue en modo edicion",
-        !document.getElementById("modeBanner").classList.contains("hidden") &&
-        document.getElementById("editProduct").classList.contains("active"));
+
 
     // Editar de nuevo y cambiar el stock
     await openEditor();
@@ -791,6 +922,39 @@ try {
     ok("El ultimo perfil usado se migra a menuStockCurrentUser",
         localStorage.getItem("menuStockCurrentUser") === "legacy-1",
         String(localStorage.getItem("menuStockCurrentUser")));
+
+    // =========================================================
+    // LOS IDS DE LOS PRODUCTOS TIENEN QUE SER ÚNICOS
+    // Antes el id era la inicial del nombre más la hora: dos productos
+    // con la misma inicial creados en el mismo milisegundo quedaban con
+    // el MISMO id, y toda búsqueda por id devolvía el producto
+    // equivocado (al borrar o al editar se tocaba el otro).
+    // =========================================================
+    for (const nombre of ["Zapato Uno", "Zapato Dos"]) {
+        click("#addProduct");
+        await waitFor(() => document.getElementById("newName") !== null);
+        setValue("#newName", nombre);
+        setValue("#nprice", "1000");
+        setValue("#nstock", "1");
+        click("#inventaryConfirmBt");
+        await acceptDialog();
+    }
+
+    const idPerfilActual = localStorage.getItem("menuStockCurrentUser");
+    const perfilActual = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.id === idPerfilActual);
+    const idsProductos = perfilActual.products.map(p => p.id);
+
+    ok("Los ids de los productos son unicos",
+        new Set(idsProductos).size === idsProductos.length,
+        `${idsProductos.length} productos, ${new Set(idsProductos).size} ids distintos`);
+
+    const idsZapatos = perfilActual.products
+        .filter(p => p.name.startsWith("Zapato"))
+        .map(p => p.id);
+    ok("Dos productos con la misma inicial reciben ids distintos",
+        idsZapatos.length === 2 && idsZapatos[0] !== idsZapatos[1],
+        idsZapatos.join(" vs "));
 
     // =========================================================
     // FORMULARIO DE ALTA DE PRODUCTO
