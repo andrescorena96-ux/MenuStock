@@ -80,6 +80,24 @@ const accCancelBt = document.getElementById("accumulateCancelBt");
 const accConfirmBt = document.getElementById("accumulateConfirmBt");
 const alternativeCont = document.getElementById("alternativeCont");
 
+// Sistema de diálogos (propio, reemplaza a prompt/alert/confirm nativos)
+const dialogRoot = document.getElementById("dialogRoot");
+const dialogTitle = document.getElementById("dialogTitle");
+const dialogBody = document.getElementById("dialogBody");
+const dialogActions = document.getElementById("dialogActions");
+const dialogBackdrop = document.getElementById("dialogBackdrop");
+
+// Compras a proveedores
+const purchasesBt = document.getElementById("purchasesBt");
+const purchasesView = document.getElementById("purchasesView");
+const purchasesList = document.getElementById("purchasesList");
+const newPurchaseBt = document.getElementById("newPurchaseBt");
+
+// Exportar / importar datos
+const exportDataBt = document.getElementById("exportDataBt");
+const importDataBt = document.getElementById("importDataBt");
+const importFileInput = document.getElementById("importFileInput");
+
 
 /* ============================================================
    2. STATE VARIABLES
@@ -93,6 +111,7 @@ let currentUser = null;
 // NUEVO
 let stockHistory = [];   // movimientos de inventario
 let categories = [];     // [{ id, name, subcategories: [{ id, name }] }]
+let purchases = [];      // compras a proveedores: [{ id, fecha, proveedor, items, total, anulada }]
 let clothingConfig = null; // { sizeSystem, sizeList } — solo si storeType === "clothing"
 
 let currentCategoryId = null;      // null = todos los productos
@@ -137,6 +156,188 @@ function safeImageUrl(url) {
 // Imagen de relleno cuando el producto no tiene una válida.
 const PLACEHOLDER_IMAGE =
     "https://i0.wp.com/tinasbotanicals.com/wp-content/uploads/2025/01/No-Product-Image-Available.png?fit=800%2C800&ssl=1";
+
+
+/* ============================================================
+   1c. SISTEMA DE DIÁLOGOS
+   Reemplaza a prompt(), alert() y confirm() nativos: los nativos
+   bloquean la pantalla, no admiten formato y rompen el diseño.
+   Estos son promesas, así que se usan con `await`.
+   ============================================================ */
+
+let dialogResolve = null;
+
+function closeDialog(result) {
+    dialogRoot.classList.add("hidden");
+
+    const resolve = dialogResolve;
+    dialogResolve = null;
+
+    if (resolve) resolve(result);
+}
+
+function openDialog({ title = "", bodyHtml = "", actions = [], onOpen = null, wide = false } = {}) {
+    dialogRoot.classList.remove("hidden");
+
+    dialogTitle.textContent = title;
+    dialogBody.innerHTML = bodyHtml;
+    dialogActions.innerHTML = "";
+
+    dialogRoot.querySelector(".dialogPanel").classList.toggle("wide", !!wide);
+
+    for (const action of actions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = action.variant === "danger" ? "confirmBt danger"
+            : action.variant === "cancel" ? "cancelBt"
+            : "confirmBt";
+        button.textContent = action.label;
+
+        button.addEventListener("click", async () => {
+            let result = action.value !== undefined ? action.value : null;
+
+            if (action.onClick) {
+                result = await action.onClick(dialogBody);
+                // Un onClick que devuelve false deja el diálogo abierto.
+                if (result === false) return;
+            }
+
+            closeDialog(result);
+        });
+
+        dialogActions.appendChild(button);
+    }
+
+    if (onOpen) onOpen(dialogBody);
+}
+
+// Convierte saltos de línea en <br> sin dejar pasar HTML.
+function formatDialogMessage(message) {
+    return escapeHtml(message).replace(/\n/g, "<br>");
+}
+
+// Aviso simple. Acepta \n para separar párrafos.
+function showAlert({ title = "Aviso", message = "" } = {}) {
+    return new Promise(resolve => {
+        dialogResolve = resolve;
+        openDialog({
+            title,
+            bodyHtml: `<p>${formatDialogMessage(message)}</p>`,
+            actions: [{ label: "Entendido", value: true }]
+        });
+    });
+}
+
+// Confirmación. Resuelve true/false.
+function showConfirm({
+    title = "¿Confirmas?",
+    message = "",
+    confirmLabel = "Aceptar",
+    cancelLabel = "Cancelar",
+    danger = false
+} = {}) {
+    return new Promise(resolve => {
+        dialogResolve = resolve;
+        openDialog({
+            title,
+            bodyHtml: `<p>${formatDialogMessage(message)}</p>`,
+            actions: [
+                { label: cancelLabel, variant: "cancel", value: false },
+                { label: confirmLabel, variant: danger ? "danger" : "confirm", value: true }
+            ]
+        });
+    });
+}
+
+// Pedir un dato. Resuelve el texto (string) o null si se cancela.
+// `validate` recibe el texto y devuelve un mensaje de error, o null si está bien.
+function showPrompt({
+    title = "",
+    label = "",
+    value = "",
+    placeholder = "",
+    hint = "",
+    confirmLabel = "Aceptar",
+    cancelLabel = "Cancelar",
+    type = "text",
+    validate = null
+} = {}) {
+    return new Promise(resolve => {
+        dialogResolve = resolve;
+        openDialog({
+            title,
+            bodyHtml: `
+                ${label ? `<label class="dialogLabel" for="dialogInput">${escapeHtml(label)}</label>` : ""}
+                <input id="dialogInput" class="dialogInput" type="${type}"
+                       value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" autocomplete="off">
+                ${hint ? `<p class="dialogHint">${escapeHtml(hint)}</p>` : ""}
+                <p id="dialogError" class="dialogError"></p>
+            `,
+            actions: [
+                { label: cancelLabel, variant: "cancel", value: null },
+                {
+                    label: confirmLabel,
+                    onClick: (body) => {
+                        const input = body.querySelector("#dialogInput");
+                        const entered = input.value.trim();
+
+                        if (validate) {
+                            const error = validate(entered);
+                            if (error) {
+                                body.querySelector("#dialogError").textContent = error;
+                                input.focus();
+                                input.select();
+                                return false;
+                            }
+                        }
+
+                        return entered;
+                    }
+                }
+            ],
+            onOpen: (body) => {
+                const input = body.querySelector("#dialogInput");
+
+                input.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        const buttons = dialogActions.querySelectorAll("button");
+                        buttons[buttons.length - 1].click();
+                    }
+                });
+
+                input.focus();
+                input.select();
+            }
+        });
+    });
+}
+
+// Diálogo informativo con contenido libre.
+function showInfo({ title = "", bodyHtml = "" } = {}) {
+    return new Promise(resolve => {
+        dialogResolve = resolve;
+        openDialog({
+            title,
+            bodyHtml,
+            actions: [{ label: "Cerrar", variant: "cancel", value: true }]
+        });
+    });
+}
+
+// Cerrar con Escape o haciendo clic fuera del panel.
+dialogBackdrop.addEventListener("click", () => {
+    const cancelBtn = dialogActions.querySelector(".cancelBt");
+    if (cancelBtn) cancelBtn.click();
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (dialogRoot.classList.contains("hidden")) return;
+
+    const cancelBtn = dialogActions.querySelector(".cancelBt");
+    if (cancelBtn) cancelBtn.click();
+});
 
 const USERS_KEY = "menuStockUsers";
 const CURRENT_USER_KEY = "menuStockCurrentUser";
@@ -204,7 +405,9 @@ const ACTION_LABELS = {
     restock: "Reposición",
     adjustment: "Ajuste manual",
     sale: "Venta",
-    deleted: "Producto eliminado"
+    deleted: "Producto eliminado",
+    purchase: "Compra a proveedor",
+    purchaseVoid: "Compra anulada"
 };
 
 
@@ -288,6 +491,7 @@ function saveCurrentUser() {
     currentUser.stockHistory = stockHistory;
     currentUser.categories = categories;
     currentUser.clothingConfig = clothingConfig;
+    currentUser.purchases = purchases;
 
     const users = getUsers();
     const index = users.findIndex(user => user.id === currentUser.id);
@@ -324,7 +528,8 @@ function createDefaultUsers() {
             restockPreferences: {},
             historial: [],
             stockHistory: [],
-            categories: []
+            categories: [],
+            purchases: []
         },
         {
             id: crypto.randomUUID(),
@@ -336,7 +541,8 @@ function createDefaultUsers() {
             restockPreferences: {},
             historial: [],
             stockHistory: [],
-            categories: []
+            categories: [],
+            purchases: []
         }
     ];
 
@@ -621,6 +827,9 @@ function selectProfile(userId) {
     if (!Array.isArray(currentUser.categories)) {
         currentUser.categories = [];
     }
+    if (!Array.isArray(currentUser.purchases)) {
+        currentUser.purchases = [];
+    }
     // Perfiles creados antes de MenúStock no tienen tipo de negocio.
     // Cualquier valor que no sea uno de los 3 tipos actuales
     // (versiones anteriores de esta app llegaron a usar "drinks",
@@ -636,6 +845,7 @@ function selectProfile(userId) {
     stockHistory = currentUser.stockHistory;
     categories = currentUser.categories;
     clothingConfig = currentUser.clothingConfig;
+    purchases = Array.isArray(currentUser.purchases) ? currentUser.purchases : [];
 
     // Los productos viejos simplemente quedan sin categoría.
     for (let product of products) {
@@ -661,18 +871,20 @@ function selectProfile(userId) {
 // una tienda de ropa). Si el usuario cancela en cualquier punto
 // de esta parte, simplemente no se crea el perfil.
 // ----------------------------------------
-function finishProfileCreation() {
-    const name = prompt("Nombre del nuevo perfil:");
-    if (!name) {
+async function finishProfileCreation() {
+    const name = await showPrompt({
+        title: "Nuevo perfil",
+        label: "Nombre del perfil",
+        placeholder: "Ej: Mi Tienda del barrio",
+        validate: (value) => value.length === 0 ? "Escribe un nombre para el perfil." : null
+    });
+
+    if (name === null) {
         resetPendingProfileState();
         return;
     }
 
     const cleanName = name.trim();
-    if (!cleanName) {
-        resetPendingProfileState();
-        return;
-    }
 
     const users = getUsers();
     const alreadyExists = users.some(
@@ -680,19 +892,25 @@ function finishProfileCreation() {
     );
 
     if (alreadyExists) {
-        alert("Ya existe un perfil con ese nombre.");
+        await showAlert({ title: "Nombre en uso", message: "Ya existe un perfil con ese nombre." });
         resetPendingProfileState();
         return;
     }
 
-    const password = prompt(`Crea una contraseña para "${cleanName}" (protegerá este perfil):`);
-    const cleanPassword = (password || "").trim();
+    const password = await showPrompt({
+        title: "Contraseña del perfil",
+        label: `Crea una contraseña para "${cleanName}"`,
+        hint: "Protege este perfil: se pedirá cada vez que se abra la app.",
+        type: "password",
+        validate: (value) => value.length === 0 ? "Necesitas una contraseña para proteger este perfil." : null
+    });
 
-    if (!cleanPassword) {
-        alert("Necesitas una contraseña para proteger este perfil. No se creó el perfil.");
+    if (password === null) {
         resetPendingProfileState();
         return;
     }
+
+    const cleanPassword = password.trim();
 
     const newUser = {
         id: crypto.randomUUID(),
@@ -705,7 +923,8 @@ function finishProfileCreation() {
         restockPreferences: {},
         historial: [],
         stockHistory: [],
-        categories: selectedStoreType === "clothing" ? buildDefaultClothingCategories() : []
+        categories: selectedStoreType === "clothing" ? buildDefaultClothingCategories() : [],
+        purchases: []
     };
 
     users.push(newUser);
@@ -921,11 +1140,13 @@ function refreshProducts() {
 function setActiveNav(button) {
     productsBt.classList.toggle("active", button === "products");
     categoriesBt.classList.toggle("active", button === "categories");
+    purchasesBt.classList.toggle("active", button === "purchases");
 }
 
 function showProductsView() {
     setActiveNav("products");
     categoriesView.classList.add("hidden");
+    purchasesView.classList.add("hidden");
 
     searchPan.classList.remove("hidden");
     productsTitle.classList.remove("hidden");
@@ -938,6 +1159,7 @@ function showProductsView() {
 
 function showCategoriesView() {
     setActiveNav("categories");
+    purchasesView.classList.add("hidden");
     searchPan.classList.add("hidden");
     productsTitle.classList.add("hidden");
     allProducts.classList.add("hidden");
@@ -1066,25 +1288,25 @@ function renderCategories() {
 // ----------------------------------------
 // CREAR / RENOMBRAR / ELIMINAR
 // ----------------------------------------
-function createCategory() {
-    const name = prompt("Nombre de la nueva categoría:");
-    if (!name) return;
+async function createCategory() {
+    const name = await showPrompt({
+        title: "Nueva categoría",
+        label: "Nombre de la categoría",
+        placeholder: "Ej: Bebidas",
+        validate: (value) => {
+            if (value.length === 0) return "Escribe un nombre para la categoría.";
+            if (categories.some(cat => cat.name.toLowerCase() === value.toLowerCase())) {
+                return "Ya existe una categoría con ese nombre.";
+            }
+            return null;
+        }
+    });
 
-    const cleanName = name.trim();
-    if (!cleanName) return;
-
-    const alreadyExists = categories.some(
-        cat => cat.name.toLowerCase() === cleanName.toLowerCase()
-    );
-
-    if (alreadyExists) {
-        alert("Ya existe una categoría con ese nombre.");
-        return;
-    }
+    if (name === null) return;
 
     categories.push({
         id: crypto.randomUUID(),
-        name: cleanName,
+        name: name.trim(),
         subcategories: []
     });
 
@@ -1092,74 +1314,91 @@ function createCategory() {
     renderCategories();
 }
 
-function createSubcategory(categoryId) {
+async function createSubcategory(categoryId) {
     const category = findCategory(categoryId);
     if (!category) return;
 
-    const name = prompt(`Nueva subcategoría dentro de "${category.name}":`);
-    if (!name) return;
+    const name = await showPrompt({
+        title: `Nueva subcategoría en "${category.name}"`,
+        label: "Nombre de la subcategoría",
+        placeholder: "Ej: Gaseosas",
+        validate: (value) => {
+            if (value.length === 0) return "Escribe un nombre para la subcategoría.";
+            if (category.subcategories.some(sub => sub.name.toLowerCase() === value.toLowerCase())) {
+                return "Ya existe una subcategoría con ese nombre.";
+            }
+            return null;
+        }
+    });
 
-    const cleanName = name.trim();
-    if (!cleanName) return;
-
-    const alreadyExists = category.subcategories.some(
-        sub => sub.name.toLowerCase() === cleanName.toLowerCase()
-    ); if (alreadyExists) {
-        alert("Ya existe una subcategoría con ese nombre.");
-        return;
-    }
+    if (name === null) return;
 
     category.subcategories.push({
         id: crypto.randomUUID(),
-        name: cleanName
+        name: name.trim()
     });
 
     saveCurrentUser();
     renderCategories();
 }
 
-function renameCategory(categoryId) {
+async function renameCategory(categoryId) {
     const category = findCategory(categoryId);
     if (!category) return;
 
-    const newName = prompt("Nuevo nombre:", category.name);
-    if (!newName) return;
+    const newName = await showPrompt({
+        title: "Renombrar categoría",
+        label: "Nuevo nombre",
+        value: category.name,
+        validate: (value) => value.length === 0 ? "El nombre no puede quedar vacío." : null
+    });
 
-    const cleanName = newName.trim();
-    if (!cleanName) return;
+    if (newName === null) return;
 
-    category.name = cleanName;
+    category.name = newName.trim();
 
     saveCurrentUser();
     renderCategories();
+    renderBreadcrumb();
+    refreshProducts();
 }
 
-function renameSubcategory(categoryId, subcategoryId) {
+async function renameSubcategory(categoryId, subcategoryId) {
     const sub = findSubcategory(categoryId, subcategoryId);
     if (!sub) return;
 
-    const newName = prompt("Nuevo nombre:", sub.name);
-    if (!newName) return;
+    const newName = await showPrompt({
+        title: "Renombrar subcategoría",
+        label: "Nuevo nombre",
+        value: sub.name,
+        validate: (value) => value.length === 0 ? "El nombre no puede quedar vacío." : null
+    });
 
-    const cleanName = newName.trim();
-    if (!cleanName) return;
+    if (newName === null) return;
 
-    sub.name = cleanName;
+    sub.name = newName.trim();
 
     saveCurrentUser();
     renderCategories();
+    renderBreadcrumb();
+    refreshProducts();
 }
 
-function deleteCategory(categoryId) {
+async function deleteCategory(categoryId) {
     const category = findCategory(categoryId);
     if (!category) return;
 
     const affected = countProductsIn(categoryId);
 
-    const confirmed = confirm(
-        `¿Eliminar la categoría "${category.name}"?\n\n` +
-        `Los ${affected} producto(s) que contiene NO se eliminan: quedan como "Sin categoría".`
-    );
+    const confirmed = await showConfirm({
+        title: "Eliminar categoría",
+        message:
+            `¿Eliminar la categoría "${category.name}"?\n\n` +
+            `Los ${affected} producto(s) que contiene NO se eliminan: quedan como "Sin categoría".`,
+        confirmLabel: "Eliminar",
+        danger: true
+    });
+
     if (!confirmed) return;
 
     // Los productos se conservan, solo pierden la referencia
@@ -1182,17 +1421,22 @@ function deleteCategory(categoryId) {
     renderCategories();
 }
 
-function deleteSubcategory(categoryId, subcategoryId) {
+async function deleteSubcategory(categoryId, subcategoryId) {
     const category = findCategory(categoryId);
     const sub = findSubcategory(categoryId, subcategoryId);
     if (!category || !sub) return;
 
     const affected = countProductsIn(categoryId, subcategoryId);
 
-    const confirmed = confirm(
-        `¿Eliminar la subcategoría "${sub.name}"?\n\n` +
-        `Los ${affected} producto(s) siguen en "${category.name}", sin subcategoría.`
-    );
+    const confirmed = await showConfirm({
+        title: "Eliminar subcategoría",
+        message:
+            `¿Eliminar la subcategoría "${sub.name}"?\n\n` +
+            `Los ${affected} producto(s) siguen en "${category.name}", sin subcategoría.`,
+        confirmLabel: "Eliminar",
+        danger: true
+    });
+
     if (!confirmed) return;
 
     for (let product of products) {
@@ -1210,6 +1454,237 @@ function deleteSubcategory(categoryId, subcategoryId) {
 
     saveCurrentUser();
     renderCategories();
+}
+
+
+/* ============================================================
+   5c. COMPRAS A PROVEEDORES
+   Registrar una compra suma el stock de los productos indicados.
+   Es el lado "comprar" de la app: lo que entra al negocio desde
+   afuera, además de lo que sale por venta.
+   ============================================================ */
+
+function showPurchasesView() {
+    setActiveNav("purchases");
+
+    searchPan.classList.add("hidden");
+    productsTitle.classList.add("hidden");
+    allProducts.classList.add("hidden");
+    actionsBar.classList.add("hidden");
+    breadcrumb.classList.add("hidden");
+    categoriesView.classList.add("hidden");
+
+    purchasesView.classList.remove("hidden");
+    renderPurchases();
+}
+
+function renderPurchases() {
+    purchasesList.innerHTML = "";
+
+    if (purchases.length === 0) {
+        purchasesList.innerHTML = `
+            <p class="purchaseEmpty">
+                Todavía no hay compras registradas.<br>
+                Cuando le compres a un proveedor, regístrala aquí para que
+                el stock y el historial queden al día.
+            </p>
+        `;
+        return;
+    }
+
+    for (const purchase of purchases) {
+        const card = document.createElement("article");
+        card.classList.add("purchaseCard");
+        if (purchase.anulada) card.classList.add("void");
+
+        const items = purchase.items.map(item => `
+            <li class="purchaseItem">
+                <span>${escapeHtml(item.nombre)}</span>
+                <span class="qty">${item.cantidad} u.</span>
+                <span>$${item.cantidad * item.precioUnitario}</span>
+            </li>
+        `).join("");
+
+        card.innerHTML = `
+            <div class="purchaseHead">
+                <strong>${escapeHtml(purchase.proveedor)}</strong>
+                <span class="purchaseDate">${escapeHtml(formatHistoryDate(purchase.fecha))}</span>
+            </div>
+
+            ${purchase.anulada ? `<span class="purchaseBadge">Anulada</span>` : ""}
+
+            <ul class="purchaseItems">${items}</ul>
+
+            <div class="purchaseFoot">
+                <strong>Total</strong>
+                <span>$${purchase.total}</span>
+            </div>
+
+            <div class="categoryCardActions">
+                <button class="catBt" data-view-purchase="${escapeHtml(purchase.id)}" type="button">Ver detalle</button>
+                ${purchase.anulada ? "" : `<button class="catBt danger" data-void-purchase="${escapeHtml(purchase.id)}" type="button">Anular</button>`}
+            </div>
+        `;
+
+        purchasesList.appendChild(card);
+    }
+}
+
+async function voidPurchase(purchaseId) {
+    const purchase = purchases.find(p => p.id === purchaseId);
+    if (!purchase || purchase.anulada) return;
+
+    const confirmed = await showConfirm({
+        title: "Anular compra",
+        message:
+            `¿Anular la compra a "${purchase.proveedor}" por $${purchase.total}?\n\n` +
+            "El stock de esos productos se devuelve y queda registrado en el historial.",
+        confirmLabel: "Anular compra",
+        danger: true
+    });
+
+    if (!confirmed) return;
+
+    purchase.anulada = true;
+
+    for (const item of purchase.items) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+
+        product.quantity -= item.cantidad;
+        recordStockChange(product, "purchaseVoid", -item.cantidad, `Compra anulada · ${item.cantidad} u.`);
+    }
+
+    saveCurrentUser();
+    refreshProducts();
+    renderPurchases();
+}
+
+function showPurchaseDetail(purchase) {
+    const rows = purchase.items.map(item => `
+        <li>
+            ${escapeHtml(item.nombre)} — ${item.cantidad} u. × $${item.precioUnitario}
+            = <strong>$${item.cantidad * item.precioUnitario}</strong>
+        </li>
+    `).join("");
+
+    showInfo({
+        title: `Compra a ${purchase.proveedor}`,
+        bodyHtml: `
+            <p>Fecha: ${escapeHtml(formatHistoryDate(purchase.fecha))}</p>
+            <ul>${rows}</ul>
+            <p><strong>Total: $${purchase.total}</strong></p>
+            ${purchase.anulada ? `<p class="dialogHint">Esta compra está anulada: el stock ya fue devuelto.</p>` : ""}
+        `
+    });
+}
+
+
+/* ============================================================
+   5d. EXPORTAR / IMPORTAR DATOS
+   Todo vive en localStorage: si se borra el navegador del
+   negocio, se pierde el inventario. Estos dos botones son el
+   respaldo. La contraseña NO se exporta.
+   ============================================================ */
+
+function slugify(text) {
+    return String(text)
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "perfil";
+}
+
+function exportProfileData() {
+    if (!currentUser) return;
+
+    const payload = {
+        app: "MenuStock",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profile: {
+            name: currentUser.profile.name,
+            storeType: currentUser.storeType,
+            clothingConfig: currentUser.clothingConfig,
+            products: currentUser.products,
+            restockPreferences: currentUser.restockPreferences,
+            historial: currentUser.historial,
+            stockHistory: currentUser.stockHistory,
+            categories: currentUser.categories,
+            purchases: currentUser.purchases
+            // La contraseña se deja fuera a propósito: es un secreto.
+        }
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `menustock-${slugify(currentUser.profile.name)}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+}
+
+async function importProfileData(file) {
+    if (!file || !currentUser) return;
+
+    const text = await file.text();
+
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        await showAlert({ title: "Archivo inválido", message: "El archivo no es un JSON válido." });
+        return;
+    }
+
+    if (!data || !data.profile || !Array.isArray(data.profile.products)) {
+        await showAlert({
+            title: "Archivo inválido",
+            message: "Este archivo no parece ser una exportación de MenúStock."
+        });
+        return;
+    }
+
+    const confirmed = await showConfirm({
+        title: "Importar datos",
+        message:
+            `Se reemplazarán los datos del perfil "${currentUser.profile.name}" por los del archivo.\n\n` +
+            "La contraseña NO se importa: se mantiene la actual.\n\n" +
+            "¿Continuar?",
+        confirmLabel: "Importar",
+        danger: true
+    });
+
+    if (!confirmed) return;
+
+    const incoming = data.profile;
+
+    products = Array.isArray(incoming.products) ? incoming.products : [];
+    restockPreferences = (incoming.restockPreferences && typeof incoming.restockPreferences === "object")
+        ? incoming.restockPreferences
+        : {};
+    historial = Array.isArray(incoming.historial) ? incoming.historial : [];
+    stockHistory = Array.isArray(incoming.stockHistory) ? incoming.stockHistory : [];
+    categories = Array.isArray(incoming.categories) ? incoming.categories : [];
+    purchases = Array.isArray(incoming.purchases) ? incoming.purchases : [];
+    currentUser.clothingConfig = incoming.clothingConfig || null;
+
+    currentCategoryId = null;
+    currentSubcategoryId = null;
+
+    saveCurrentUser();
+    showProductsView();
+
+    await showAlert({
+        title: "Datos importados",
+        message: `Se importaron los datos de "${incoming.name || currentUser.profile.name}".`
+    });
 }
 
 
@@ -1372,7 +1847,12 @@ function closeModal() {
    10. CONFIRM / CANCEL ACTIONS
    ============================================================ */
 
-function confirmButton() {
+async function confirmButton() {
+    // Los avisos de éxito se guardan aquí y se muestran DESPUÉS de
+    // guardar, para que el dato quede en localStorage aunque el usuario
+    // cierre la pestaña con el aviso en pantalla.
+    let messageAfterSave = null;
+
     switch (act) {
 
         // =========================
@@ -1380,7 +1860,7 @@ function confirmButton() {
         // =========================
         case "storeType": {
             if (!selectedStoreType) {
-                alert("Elige un tipo de negocio para continuar.");
+                await showAlert({ title: "Falta elegir el tipo", message: "Elige un tipo de negocio para continuar." });
                 return;
             }
 
@@ -1393,7 +1873,7 @@ function confirmButton() {
                 return;
             }
 
-            finishProfileCreation();
+            await finishProfileCreation();
             return;
         }
 
@@ -1402,7 +1882,7 @@ function confirmButton() {
         // =========================
         case "clothingSizeSystem": {
             if (!selectedSizeSystem) {
-                alert("Elige un sistema de tallas para continuar.");
+                await showAlert({ title: "Falta elegir el sistema", message: "Elige un sistema de tallas para continuar." });
                 return;
             }
 
@@ -1416,14 +1896,14 @@ function confirmButton() {
                 const raw = sizeListInput ? sizeListInput.value.trim() : "";
 
                 if (!raw) {
-                    alert("Escribe al menos una talla, separadas por comas.");
+                    await showAlert({ title: "Faltan tallas", message: "Escribe al menos una talla, separada por comas." });
                     return;
                 }
 
                 sizeList = raw.split(",").map(s => s.trim()).filter(Boolean);
 
                 if (sizeList.length === 0) {
-                    alert("Escribe al menos una talla válida.");
+                    await showAlert({ title: "Faltan tallas", message: "Escribe al menos una talla válida." });
                     return;
                 }
             }
@@ -1431,7 +1911,7 @@ function confirmButton() {
             pendingClothingConfig = { sizeSystem: selectedSizeSystem, sizeList };
 
             closeModal();
-            finishProfileCreation();
+            await finishProfileCreation();
             return;
         }
 
@@ -1450,7 +1930,7 @@ function confirmButton() {
             let myStock = newStock.valueAsNumber;
 
             if (newName.value.trim() === "" || newPrice.value.trim() === "") {
-                alert("El nombre y el precio son obligatorios.");
+                await showAlert({ title: "Faltan datos", message: "El nombre y el precio son obligatorios." });
                 return;
             }
 
@@ -1471,7 +1951,7 @@ function confirmButton() {
                     const qty = qtyInput ? qtyInput.valueAsNumber : NaN;
 
                     if (checked.length === 0 || Number.isNaN(qty) || qty < 0) {
-                        alert("Elige al menos una talla y una cantidad válida.");
+                        await showAlert({ title: "Faltan datos", message: "Elige al menos una talla y una cantidad válida." });
                         return;
                     }
 
@@ -1481,7 +1961,7 @@ function confirmButton() {
                     const rows = document.querySelectorAll("#perSizeQtyRows .sizeQtyRow");
 
                     if (rows.length === 0) {
-                        alert("Elige al menos una talla.");
+                        await showAlert({ title: "Faltan tallas", message: "Elige al menos una talla." });
                         return;
                     }
 
@@ -1491,7 +1971,7 @@ function confirmButton() {
                         const qty = row.querySelector(".perSizeQty").valueAsNumber;
 
                         if (Number.isNaN(qty) || qty < 0) {
-                            alert(`Ingresa una cantidad válida para la talla ${size}.`);
+                            await showAlert({ title: "Cantidad inválida", message: `Ingresa una cantidad válida para la talla ${size}.` });
                             return;
                         }
                         variants.push({ size, color: null, quantity: qty });
@@ -1501,7 +1981,7 @@ function confirmButton() {
                     const blocks = document.querySelectorAll("#colorBlocks .colorBlock");
 
                     if (blocks.length === 0) {
-                        alert("Agrega al menos un color.");
+                        await showAlert({ title: "Faltan colores", message: "Agrega al menos un color." });
                         return;
                     }
 
@@ -1510,13 +1990,13 @@ function confirmButton() {
                         const colorName = block.querySelector(".colorNameInput").value.trim();
 
                         if (!colorName) {
-                            alert("Ponle nombre a cada color.");
+                            await showAlert({ title: "Color sin nombre", message: "Ponle nombre a cada color." });
                             return;
                         }
 
                         const rows = block.querySelectorAll(".sizeQtyRow");
                         if (rows.length === 0) {
-                            alert(`Elige al menos una talla para el color "${colorName}".`);
+                            await showAlert({ title: "Faltan tallas", message: `Elige al menos una talla para el color "${colorName}".` });
                             return;
                         }
 
@@ -1525,7 +2005,7 @@ function confirmButton() {
                             const qty = row.querySelector(".perSizeQty").valueAsNumber;
 
                             if (Number.isNaN(qty) || qty < 0) {
-                                alert(`Ingresa una cantidad válida para ${colorName} / ${size}.`);
+                                await showAlert({ title: "Cantidad inválida", message: `Ingresa una cantidad válida para ${colorName} / ${size}.` });
                                 return;
                             }
                             variants.push({ size, color: colorName, quantity: qty });
@@ -1592,10 +2072,104 @@ function confirmButton() {
         }
 
         // =========================
+        // NUEVA COMPRA A PROVEEDOR
+        // =========================
+        case "newPurchase": {
+            const supplierInput = document.getElementById("purchaseSupplier");
+            const supplier = supplierInput.value.trim();
+
+            if (!supplier) {
+                await showAlert({ title: "Falta el proveedor", message: "Escribe el nombre del proveedor." });
+                supplierInput.focus();
+                return;
+            }
+
+            const rows = [...modalcont.querySelectorAll(".purchaseLine[data-index]")];
+
+            if (rows.length === 0) {
+                await showAlert({ title: "Compra vacía", message: "Agrega al menos un producto a la compra." });
+                return;
+            }
+
+            const items = rows.map(row => ({
+                productId: row.querySelector(".purchaseProduct").value,
+                cantidad: Number(row.querySelector(".purchaseQty").value),
+                precioUnitario: Number(row.querySelector(".purchasePrice").value)
+            }));
+
+            const invalid = items.find(item =>
+                !item.productId ||
+                !Number.isFinite(item.cantidad) || item.cantidad <= 0 ||
+                !Number.isFinite(item.precioUnitario) || item.precioUnitario < 0
+            );
+
+            if (invalid) {
+                await showAlert({
+                    title: "Datos incompletos",
+                    message: "Revisa las cantidades y los precios de los productos de la compra."
+                });
+                return;
+            }
+
+            const detailedItems = items.map(item => {
+                const product = products.find(p => p.id === item.productId);
+                return {
+                    productId: item.productId,
+                    nombre: product ? product.name : "Producto eliminado",
+                    cantidad: item.cantidad,
+                    precioUnitario: item.precioUnitario
+                };
+            });
+
+            const total = detailedItems.reduce(
+                (sum, item) => sum + item.cantidad * item.precioUnitario, 0
+            );
+
+            purchases.unshift({
+                id: crypto.randomUUID(),
+                fecha: new Date().toISOString(),
+                proveedor: supplier,
+                items: detailedItems,
+                total: total,
+                anulada: false
+            });
+
+            // La compra suma stock a los productos.
+            for (const item of detailedItems) {
+                const product = products.find(p => p.id === item.productId);
+                if (!product) continue;
+
+                product.quantity += item.cantidad;
+                recordStockChange(
+                    product,
+                    "purchase",
+                    item.cantidad,
+                    `Compra a ${supplier} · ${item.cantidad} u.`
+                );
+            }
+
+            refreshProducts();
+            closeModal();
+            act = "bill";
+            renderPurchases();
+
+            messageAfterSave = {
+                title: "Compra registrada",
+                message: `Se registró la compra a ${supplier} por $${total}. El stock ya está actualizado.`
+            };
+            break;
+        }
+
+        // =========================
         // RESTOCK
         // =========================
         case "restock": {
-            let itemsUpdated = 0;
+            // Primero se validan TODAS las filas y solo después se aplica
+            // nada. Antes se modificaba sobre la marcha: si una fila estaba
+            // mal, las anteriores ya habían cambiado en memoria pero no se
+            // guardaban, y la pantalla quedaba desincronizada.
+            const parsedRows = [];
+            let invalid = null;
 
             for (let product of getVisibleProducts()) {
                 const packSelect = document.getElementById(`pack-${product.id}`);
@@ -1608,20 +2182,40 @@ function confirmButton() {
                 if (parsed.empty) continue;
 
                 if (!parsed.ok) {
-                    alert(
-                        `La cantidad de "${product.name}" no es válida.\n\n` +
-                        `Usa números con + y -, por ejemplo: 2 + 16, 10, -3.`
-                    );
-                    qtyInput.focus();
-                    qtyInput.select();
-                    return;
+                    invalid = { product, qtyInput };
+                    break;
                 }
 
                 if (parsed.units === 0) continue;
 
-                // ACTUALIZAR STOCK
+                parsedRows.push({ product, parsed, packSelect, qtyInput });
+            }
+
+            if (invalid) {
+                await showAlert({
+                    title: "Cantidad inválida",
+                    message:
+                        `La cantidad de "${invalid.product.name}" no es válida.\n\n` +
+                        "Usa números con + y -, por ejemplo: 2 + 16, 10, -3."
+                });
+                invalid.qtyInput.focus();
+                invalid.qtyInput.select();
+                return;
+            }
+
+            if (parsedRows.length === 0) {
+                await showAlert({
+                    title: "Nada que guardar",
+                    message: "Ingresa al menos una cantidad distinta de 0 para guardar."
+                });
+                return;
+            }
+
+            // Todo válido: ahora sí se aplica.
+            for (const row of parsedRows) {
+                const { product, parsed, packSelect, qtyInput } = row;
+
                 product.quantity += parsed.units;
-                itemsUpdated++;
 
                 const isAdjustment = packSelect.value === "none";
                 const detail = `${packLabel(packSelect.value)} · ${qtyInput.value.trim()}`;
@@ -1639,14 +2233,8 @@ function confirmButton() {
                 }
             }
 
-            // VALIDAR QUE HUBO RESTOCK
-            if (itemsUpdated === 0) {
-                alert("Ingresa al menos una cantidad distinta de 0 para guardar.");
-                return;
-            }
-
             refreshProducts();
-            alert("Stock actualizado exitosamente.");
+            messageAfterSave = { title: "Listo", message: "Stock actualizado exitosamente." };
             closeModal();
             act = "bill";
             break;
@@ -1657,7 +2245,7 @@ function confirmButton() {
         // =========================
         case "changePrice": {
             if (myList.length === 0) {
-                alert("No hay productos seleccionados.");
+                await showAlert({ title: "Nada seleccionado", message: "No hay productos seleccionados." });
                 return;
             }
 
@@ -1671,7 +2259,7 @@ function confirmButton() {
                 const newPrice = inp.valueAsNumber;
 
                 if (Number.isNaN(newPrice) || newPrice < 0) {
-                    alert(`Ingresa un precio válido para ${product.name}.`);
+                    await showAlert({ title: "Precio inválido", message: `Ingresa un precio válido para ${product.name}.` });
                     return;
                 }
 
@@ -1679,7 +2267,7 @@ function confirmButton() {
             }
 
             refreshProducts();
-            alert("Precio actualizado.");
+            messageAfterSave = { title: "Listo", message: "Precio actualizado." };
 
             // Vaciar la cola de cambio de precio
             myList = [];
@@ -1699,7 +2287,7 @@ function confirmButton() {
         // =========================
         case "bill": {
             if (myList.length === 0 || bill === 0) {
-                alert("No hay productos en la cuenta.");
+                await showAlert({ title: "Cuenta vacía", message: "No hay productos en la cuenta." });
                 return;
             }
 
@@ -1720,10 +2308,10 @@ function confirmButton() {
             }
 
             if (shortages.length > 0) {
-                alert(
-                    "No hay stock suficiente para completar la venta:\n\n" +
-                    shortages.join("\n")
-                );
+                await showAlert({
+                    title: "No hay stock suficiente",
+                    message: "No hay stock suficiente para completar la venta:\n\n" + shortages.join("\n")
+                });
                 return;
             }
 
@@ -1743,7 +2331,7 @@ function confirmButton() {
 
             // Guardar la venta ANTES de vaciar myList
             addToHistorial();
-            alert(`Venta finalizada. Total: $${bill}`);
+            messageAfterSave = { title: "Venta finalizada", message: `Venta finalizada. Total: $${bill}` };
 
             // Reiniciar todo
             bill = 0;
@@ -1762,7 +2350,7 @@ function confirmButton() {
         // =========================
         case "delete": {
             if (myList.length === 0) {
-                alert("No hay productos seleccionados.");
+                await showAlert({ title: "Nada seleccionado", message: "No hay productos seleccionados." });
                 return;
             }
 
@@ -1777,7 +2365,7 @@ function confirmButton() {
             }
 
             refreshProducts();
-            alert("Producto(s) eliminado(s).");
+            messageAfterSave = { title: "Listo", message: "Producto(s) eliminado(s)." };
 
             myList = [];
             act = "bill";
@@ -1796,6 +2384,10 @@ function confirmButton() {
     // y borraba el filtro de categoría en el que estuviéramos.
     // refreshProducts() respeta la categoría activa.
     refreshProducts();
+
+    if (messageAfterSave) {
+        await showAlert(messageAfterSave);
+    }
 }
 
 function cancelCurrentAction() {
@@ -1821,6 +2413,9 @@ function cancelCurrentAction() {
             break;
         }
         case 'restock':
+            closeModal();
+            break;
+        case 'newPurchase':
             closeModal();
             break;
         case 'history':
@@ -2283,6 +2878,135 @@ function myInventaryActions(action) {
         }
 
         // =========================
+        // NUEVA COMPRA A PROVEEDOR
+        // Usa el mismo contenedor centrado del Restock (#modali)
+        // =========================
+        case 'newPurchase': {
+            const knownSuppliers = [...new Set(purchases.map(p => p.proveedor))];
+            const supplierOptions = knownSuppliers
+                .map(name => `<option value="${escapeHtml(name)}"></option>`)
+                .join("");
+
+            modalcont.innerHTML = `
+                <div class="restockModalContainer show purchaseForm">
+                    <h3>Registrar compra a proveedor</h3>
+                    <p class="restockHint">
+                        Los productos que agregues entran como stock nuevo. La compra
+                        queda registrada en la lista de Compras y en el historial de
+                        movimientos del inventario.
+                    </p>
+
+                    <div class="purchaseFormSection">
+                        <span class="purchaseFormTitle">Proveedor</span>
+                        <input id="purchaseSupplier" type="text" class="purchaseSupplierInput"
+                               list="supplierList" placeholder="Nombre del proveedor" autocomplete="off">
+                        <datalist id="supplierList">${supplierOptions}</datalist>
+                    </div>
+
+                    <div class="purchaseFormSection">
+                        <span class="purchaseFormTitle">Productos</span>
+
+                        <div class="purchaseLine purchaseLineHead">
+                            <span class="hProduct">Producto</span>
+                            <span class="hNum">Cantidad</span>
+                            <span class="hNum">Precio</span>
+                            <span class="hTotal">Total</span>
+                            <span class="hRemove"></span>
+                        </div>
+
+                        <div id="purchaseLines"></div>
+
+                        <button id="addPurchaseLineBt" class="addLineBt" type="button">+ Agregar producto</button>
+                    </div>
+
+                    <div class="purchaseSummary">
+                        <span>Total de la compra</span>
+                        <strong id="purchaseTotal">$0</strong>
+                    </div>
+
+                    <div class="buttons">
+                        <button id="inventaryCancelBt" class="cancelBt" type="button">Cancelar</button>
+                        <button id="inventaryConfirmBt" class="confirmBt" type="button">Registrar compra</button>
+                    </div>
+                </div>
+            `;
+
+            const linesContainer = document.getElementById("purchaseLines");
+            const totalElement = document.getElementById("purchaseTotal");
+            const lines = [];
+
+            function productOptionsHtml(selectedId) {
+                return products.map(product => `
+                    <option value="${escapeHtml(product.id)}" ${product.id === selectedId ? "selected" : ""}>
+                        ${escapeHtml(product.name)}
+                    </option>
+                `).join("");
+            }
+
+            function updateTotal() {
+                const total = lines.reduce((sum, line) => sum + (line.cantidad || 0) * (line.precio || 0), 0);
+                totalElement.textContent = `$${total}`;
+            }
+
+            function renderLines() {
+                linesContainer.innerHTML = lines.map((line, index) => `
+                    <div class="purchaseLine" data-index="${index}">
+                        <select class="purchaseProduct">${productOptionsHtml(line.productId)}</select>
+                        <input type="number" class="purchaseQty" min="1" step="1" value="${line.cantidad}">
+                        <input type="number" class="purchasePrice" min="0" step="1" value="${line.precio}">
+                        <span class="purchaseLineTotal">$${(line.cantidad || 0) * (line.precio || 0)}</span>
+                        <button class="purchaseLineRemove" type="button" aria-label="Quitar producto">&times;</button>
+                    </div>
+                `).join("");
+
+                linesContainer.querySelectorAll(".purchaseLine[data-index]").forEach(row => {
+                    const index = Number(row.dataset.index);
+
+                    row.querySelector(".purchaseProduct").addEventListener("change", (event) => {
+                        lines[index].productId = event.target.value;
+                    });
+
+                    // El total de la línea y el total general se actualizan en
+                    // el sitio: redibujar toda la lista perdería el foco
+                    // mientras se escribe.
+                    row.querySelector(".purchaseQty").addEventListener("input", (event) => {
+                        lines[index].cantidad = Math.max(0, Number(event.target.value) || 0);
+                        row.querySelector(".purchaseLineTotal").textContent =
+                            `$${lines[index].cantidad * (lines[index].precio || 0)}`;
+                        updateTotal();
+                    });
+
+                    row.querySelector(".purchasePrice").addEventListener("input", (event) => {
+                        lines[index].precio = Math.max(0, Number(event.target.value) || 0);
+                        row.querySelector(".purchaseLineTotal").textContent =
+                            `$${(lines[index].cantidad || 0) * lines[index].precio}`;
+                        updateTotal();
+                    });
+
+                    row.querySelector(".purchaseLineRemove").addEventListener("click", () => {
+                        lines.splice(index, 1);
+                        renderLines();
+                    });
+                });
+
+                updateTotal();
+            }
+
+            // La primera línea ya viene con un producto y cantidad 1.
+            lines.push({ productId: products[0].id, cantidad: 1, precio: 0 });
+            renderLines();
+
+            document.getElementById("addPurchaseLineBt").addEventListener("click", () => {
+                lines.push({ productId: products[0].id, cantidad: 1, precio: 0 });
+                renderLines();
+            });
+
+            document.getElementById("inventaryCancelBt").addEventListener("click", cancelCurrentAction);
+            document.getElementById("inventaryConfirmBt").addEventListener("click", confirmButton);
+            break;
+        }
+
+        // =========================
         // HISTORIAL DE INVENTARIO
         // Usa el mismo contenedor centrado del Restock (#modali)
         // =========================
@@ -2399,7 +3123,7 @@ function deleteItem(product, billListObj) {
    13. ACCUMULATE ACTIONS (bill / changePrice / delete)
    ============================================================ */
 
-function accumulateActions(action, event) {
+async function accumulateActions(action, event) {
     const card = event.target.closest(".productCard");
     if (!card) return;
 
@@ -2493,7 +3217,7 @@ function accumulateActions(action, event) {
                     currentPrice: product.price
                 });
             } else {
-                alert("Ya agregaste este producto a la lista de cambio de precio.");
+                await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de cambio de precio." });
                 return;
             }
 
@@ -2528,7 +3252,7 @@ function accumulateActions(action, event) {
                     createdIn: product.createdIn
                 });
             } else {
-                alert("Ya agregaste este producto a la lista de eliminación.");
+                await showAlert({ title: "Ya está en la lista", message: "Ya agregaste este producto a la lista de eliminación." });
                 return;
             }
 
@@ -2621,32 +3345,32 @@ changeProfileBt.addEventListener("click", () => {
     showProfiles();
 });
 
-renameProfileBt.addEventListener("click", () => {
+renameProfileBt.addEventListener("click", async () => {
     if (!currentUser) return;
 
-    const newName = prompt("Nuevo nombre:", currentUser.profile.name);
-    if (!newName) return;
+    const newName = await showPrompt({
+        title: "Cambiar nombre",
+        label: "Nuevo nombre del perfil",
+        value: currentUser.profile.name,
+        validate: (value) => {
+            if (value.length === 0) return "El nombre no puede quedar vacío.";
+            const users = getUsers();
+            const exists = users.some(
+                user =>
+                    user.id !== currentUser.id &&
+                    user.profile.name.toLowerCase() === value.toLowerCase()
+            );
+            return exists ? "Ya existe un perfil con ese nombre." : null;
+        }
+    });
 
-    const cleanName = newName.trim();
-    if (!cleanName) return;
+    if (newName === null) return;
 
-    const users = getUsers();
-
-    const alreadyExists = users.some(
-        user =>
-            user.id !== currentUser.id &&
-            user.profile.name.toLowerCase() === cleanName.toLowerCase()
-    );
-
-    if (alreadyExists) {
-        alert("Ya existe un perfil con ese nombre.");
-        return;
-    }
-
-    currentUser.profile.name = cleanName;
+    currentUser.profile.name = newName.trim();
 
     saveCurrentUser();
     updateProfileUI();
+    displayProfiles();
 });
 
 // --- Search / filter ---
@@ -2765,6 +3489,54 @@ breadcrumb.addEventListener("click", (event) => {
     }
 });
 
+// --- Compras a proveedores ---
+purchasesBt.addEventListener("click", showPurchasesView);
+
+newPurchaseBt.addEventListener("click", async () => {
+    if (products.length === 0) {
+        await showAlert({
+            title: "Sin productos",
+            message: "Primero agrega productos al inventario: una compra suma stock a productos que ya existen."
+        });
+        return;
+    }
+
+    act = "newPurchase";
+    myInventaryActions('newPurchase');
+});
+
+purchasesList.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+
+    if (button.dataset.viewPurchase) {
+        const purchase = purchases.find(p => p.id === button.dataset.viewPurchase);
+        if (purchase) showPurchaseDetail(purchase);
+        return;
+    }
+
+    if (button.dataset.voidPurchase) {
+        voidPurchase(button.dataset.voidPurchase);
+    }
+});
+
+// --- Exportar / importar datos ---
+exportDataBt.addEventListener("click", () => {
+    profileMenu.classList.add("hidden");
+    exportProfileData();
+});
+
+importDataBt.addEventListener("click", () => {
+    profileMenu.classList.add("hidden");
+    importFileInput.click();
+});
+
+importFileInput.addEventListener("change", async () => {
+    const file = importFileInput.files && importFileInput.files[0];
+    importFileInput.value = "";   // permite reimportar el mismo archivo
+    if (file) await importProfileData(file);
+});
+
 // --- Accumulate panel buttons ---
 deleteProduct.addEventListener("click", () => {
     myList = [];
@@ -2804,10 +3576,10 @@ accCancelBt.addEventListener("click", cancelCurrentAction);
 accConfirmBt.addEventListener("click", confirmButton);
 
 // --- Inventory action buttons (restock / add product / history) ---
-restock.addEventListener("click", () => {
-    // Si estamos dentro de una categoría, el Restock trabaja sobre esos productos
+restock.addEventListener("click", async () => {
+    // Si estamos dentro de una categoría, el Reponer trabaja sobre esos productos
     if (getVisibleProducts().length === 0) {
-        alert("No hay productos para reabastecer aquí.");
+        await showAlert({ title: "No hay productos", message: "No hay productos para reabastecer aquí." });
         return;
     }
 

@@ -78,8 +78,16 @@ function runHeadless(browser, url) {
 
         const child = spawn(browser, args, { stdio: ["ignore", "pipe", "pipe"] });
         let stdout = "";
+        let stderr = "";
         child.stdout.on("data", d => { stdout += d.toString(); });
-        child.on("close", () => resolve(stdout));
+        child.stderr.on("data", d => { stderr += d.toString(); });
+        child.on("close", () => {
+            if (process.env.SHOW_STDERR && stderr.trim()) {
+                console.error("--- stderr del navegador ---");
+                console.error(stderr.slice(0, 4000));
+            }
+            resolve(stdout);
+        });
     });
 }
 

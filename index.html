@@ -273,6 +273,7 @@
                 <button id="restock" class="restockBt" type="button">Reponer</button>
                 <button id="productsBt" class="restockBt navBt active" type="button">Productos</button>
                 <button id="categoriesBt" class="restockBt navBt" type="button">Categorías</button>
+                <button id="purchasesBt" class="restockBt navBt" type="button">Compras</button>
                 <button id="historyBt" class="restockBt" type="button">Historial</button>
             </div>
 
@@ -380,6 +381,14 @@
                         Cambiar nombre
                     </button>
 
+                    <button id="exportDataBt" type="button">
+                        Exportar datos
+                    </button>
+
+                    <button id="importDataBt" type="button">
+                        Importar datos
+                    </button>
+
                 </div>
 
 
@@ -428,6 +437,22 @@
                 </div>
             </section>
 
+            <!-- VISTA DE COMPRAS -->
+            <section id="purchasesView" class="purchasesView hidden">
+                <div class="categoriesHeader">
+                    <h2>Compras a proveedores</h2>
+                    <button id="newPurchaseBt" class="newCategoryBt" type="button">+ Nueva compra</button>
+                </div>
+
+                <p class="purchasesHint">
+                    Registrar una compra a proveedor suma el stock de los productos
+                    indicados y queda en el historial. Sirve para llevar el control
+                    de lo que entra al negocio, además de lo que sale por venta.
+                </p>
+
+                <div id="purchasesList" class="purchaseList"></div>
+            </section>
+
             <section id="actionsBar" class="actions">
                 <ul>
                     <li id="addProduct" class="opt" role="button" tabindex="0">Agregar producto</li>
@@ -453,6 +478,25 @@
         </main>
 
         </div><!-- /#appRoot -->
+
+        <!-- =========================================================
+             SISTEMA DE DIÁLOGOS
+             Reemplaza a prompt(), alert() y confirm() nativos, que
+             bloquean la pantalla y se ven fuera de tono con la app.
+             Es una capa aparte de #actionPan para que nunca choque
+             con los modales de inventario.
+             ========================================================= -->
+        <div id="dialogRoot" class="dialogRoot hidden" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+            <div id="dialogBackdrop" class="dialogBackdrop"></div>
+            <div class="dialogPanel">
+                <h3 id="dialogTitle" class="dialogTitle"></h3>
+                <div id="dialogBody" class="dialogBody"></div>
+                <div id="dialogActions" class="dialogActions"></div>
+            </div>
+        </div>
+
+        <!-- Selector de archivo para importar datos -->
+        <input type="file" id="importFileInput" accept="application/json,.json" hidden>
 
         <noscript>
             <div style="padding: 2rem; text-align: center; font-family: sans-serif;">

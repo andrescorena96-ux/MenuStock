@@ -62,24 +62,72 @@ Organizado en secciones numeradas:
 
 | Sección | Contenido |
 |---|---|
-| 1 / 1b | Referencias al DOM y utilidades de escape |
+| 1 / 1b / 1c | Referencias al DOM, utilidades de escape, sistema de diálogos |
 | 2 | Variables de estado |
 | 3 | Persistencia en `localStorage` |
 | 3b–3e | Historial de stock, expresiones de reposición, landing |
 | 4–5 | Perfiles, gate de contraseña, menú de perfil |
 | 5b | Categorías y subcategorías |
+| 5c | Compras a proveedores |
+| 5d | Exportar / importar datos |
 | 6–7 | Render de productos y búsqueda |
 | 8–10 | Cuenta, modales, confirmar/cancelar |
-| 11 | Modales de inventario (producto, reposición, historial) |
+| 11 | Modales de inventario (producto, reposición, compra, historial) |
 | 12–13 | Render de la cuenta y acciones acumulativas |
 | 14 | Event listeners |
 | 15 | Inicialización |
 
 ---
 
+## Diálogos propios
+
+La app **no usa `prompt()`, `alert()` ni `confirm()` nativos**: bloquean la pantalla, no admiten formato y rompen el diseño. En su lugar hay una capa de diálogos (`#dialogRoot`) con tres funciones que son promesas:
+
+```js
+await showAlert({ title, message });            // aviso
+await showConfirm({ title, message, danger });  // confirmacion -> true/false
+await showPrompt({ title, label, validate });   // pedir un dato -> string o null
+```
+
+`validate` recibe el texto escrito y devuelve un mensaje de error, o `null` si está bien. Si devuelve un error, **el diálogo no se cierra** y el mensaje se muestra dentro del panel:
+
+```js
+const name = await showPrompt({
+    title: "Nueva categoría",
+    label: "Nombre de la categoría",
+    validate: (value) => value.length === 0 ? "Escribe un nombre." : null
+});
+```
+
+Se cierran con Escape o haciendo clic en el fondo.
+
+---
+
+## Compras a proveedores
+
+El lado "comprar" de la app: lo que **entra** al negocio, además de lo que sale por venta.
+
+- Vista **Compras** en la cabecera, con el listado de compras registradas.
+- **+ Nueva compra**: proveedor (con autocompletado de proveedores anteriores), y una o más líneas de producto con cantidad y precio unitario. El total se calcula en vivo.
+- Al registrar la compra, el stock de cada producto **sube** y queda un movimiento `purchase` en el historial de inventario.
+- **Anular** una compra devuelve el stock y deja un movimiento `purchaseVoid` en el historial. La compra no se borra: queda marcada como anulada.
+
+---
+
+## Exportar e importar datos
+
+Todo vive en `localStorage`: si se borra el navegador del negocio, se pierde el inventario. Desde el menú del perfil:
+
+- **Exportar datos** → descarga un `.json` con el perfil completo (productos, categorías, compras, historiales).
+- **Importar datos** → reemplaza los datos del perfil actual con los del archivo.
+
+**La contraseña no se exporta ni se importa**: es un secreto y debe quedar solo en el dispositivo.
+
+---
+
 ## Pruebas
 
-Hay una prueba end-to-end que monta la app real en un navegador headless y maneja la interfaz como lo haría una persona (clics, escritura en campos, elección de opciones):
+Hay una prueba end-to-end que monta la app real en un navegador headless y maneja la interfaz como lo haría una persona (clics, escritura en campos, elección de opciones, respuestas a los diálogos):
 
 ```bash
 npm test
@@ -87,7 +135,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre 28 casos: arranque, creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock y migración de las claves antiguas de `localStorage`.
+Cubre **51 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`.
 
 ---
 
@@ -106,7 +154,12 @@ Todo vive en `localStorage`, en la clave `inventoryUsers`. Cada **perfil** es un
   restockPreferences: {},         // { productId: packSize }
   historial: [],                  // ventas
   stockHistory: [],               // movimientos de stock (máx. 1000)
-  categories: [{ id, name, subcategories: [{ id, name }] }]
+  categories: [{ id, name, subcategories: [{ id, name }] }],
+  purchases: [{                   // compras a proveedores
+    id, fecha, proveedor,
+    items: [{ productId, nombre, cantidad, precioUnitario }],
+    total, anulada
+  }]
 }
 ```
 
@@ -140,23 +193,27 @@ La entrada se valida con una expresión regular y se suma término a término: *
 - [x] Perfiles con contraseña
 - [x] Inventario: alta, búsqueda, filtro por precio/stock
 - [x] Categorías y subcategorías
-- [x] Restock con conversiones de empaque
+- [x] Reposición con conversiones de empaque
 - [x] Historial de movimientos de stock
 - [x] Cuenta / venta
 - [x] Tienda de ropa: tallas, colores y cantidad por variante
-- [ ] Carrito / módulo de compra (el lado "comprar" de la app)
+- [x] Diálogos propios (sin `prompt`/`alert`/`confirm` nativos)
+- [x] **Compras a proveedores** (entrada de stock, con anulación)
+- [x] Exportar / importar datos (respaldo en JSON)
+- [ ] Carrito y pedido del cliente final
+- [ ] Catálogo público para el cliente
 - [ ] Backend y sincronización entre dispositivos
-- [ ] Exportar / importar inventario
+- [ ] Cálculo de costos y utilidad por producto
 
 ---
 
 ## Pendientes técnicos
 
 1. **Contraseñas en texto plano.** `localStorage` no cifra nada y es legible por cualquiera con acceso al navegador. Mientras sea local, es aceptable; en cuanto haya backend, esto pasa a ser un problema serio.
-2. **`prompt()` / `alert()` / `confirm()` nativos.** Bloquean la pantalla y se ven fuera de tono con el resto de la app. Deberían ser modales propios de MenúStock.
-3. **CSS con mucho `!important`.** Sobre todo en `#modali` y `#modali-content`, donde cada propiedad está forzada. Funciona, pero cualquier ajuste fino se vuelve frágil.
-4. **Nombres heredados.** `#modali`, `#modali-content` y `.closing` son restos de versiones anteriores; `.closing` convive con `.show` para el mismo efecto.
-5. **El lado "comprar" de la app no existe.** Todo el flujo es del lado del negocio: inventar, reponer y cobrar.
+2. **CSS con mucho `!important`.** Sobre todo en `#modali` y `#modali-content`, donde cada propiedad está forzada. Funciona, pero cualquier ajuste fino se vuelve frágil.
+3. **Nombres heredados.** `#modali`, `#modali-content` y `.closing` son restos de versiones anteriores; `.closing` convive con `.show` para el mismo efecto.
+4. **Los datos viven solo en este dispositivo.** No hay sincronización: dos Computers con la misma app no ven lo mismo. Exportar/importar es el parche, no la solución.
+5. **El historial de ventas no tiene pantalla.** Se guarda (`historial`) pero no se muestra en ninguna parte de la interfaz.
 
 ---
 
@@ -169,11 +226,13 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | El filtro por precio ordenaba como texto (100 antes que 20) | `.sort((a, b) => a.price - b.price)` |
 | El historial de ventas guardaba `[object Object]` | Renglones estructurados: `{ id, nombre, precio, cantidad }` |
 | Se podía vender más stock del que había | Se valida **antes** de descontar; si no alcanza, la venta se cancela |
+| La reposición aplicaba la mitad si una fila estaba mal | Se validan todas las filas y solo después se aplica |
 | Perfiles viejos sin `products` reventaban la app | Guards al cargar cada campo del perfil |
 | La barra de acciones no era accesible con teclado | `role="button"` + `tabindex` + activación con Enter/Espacio |
 | Los `console.log` de debug spampeaban la consola | Eliminados |
 | La regla móvil del modal de reposición no aplicaba | Selector corregido (tenía menos especificidad que la base) |
 | `height: 70em` en el overlay | `height: 100%` |
+| `prompt()`/`alert()`/`confirm()` nativos bloqueaban la pantalla | Capa de diálogos propios con validación en línea |
 
 ---
 

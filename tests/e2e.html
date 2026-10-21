@@ -14,8 +14,9 @@
  *
  * Monta la app real (index.html + home.js) en esta página y maneja la
  * interfaz como lo haría una persona: hacer clic, escribir en los
- * campos, elegir opciones. Al final deja el resultado en #out para que
- * el runner (tests/run.js) lo lea del DOM.
+ * campos, elegir opciones, responder los diálogos de la app.
+ * Al final deja el resultado en #out para que el runner (tests/run.js)
+ * lo lea del DOM.
  *
  * Se ejecuta abriendo tests/e2e.html en un navegador headless.
  */
@@ -32,15 +33,31 @@ function fail(name, error) {
     log.push(String(error && error.stack).split("\n").slice(0, 4).join("\n"));
 }
 
-// --- Los diálogos nativos bloquearían la prueba: los interceptamos ---
-const prompts = [];
-const alerts = [];
-
-window.prompt = (message, defaultValue = "") => {
-    return prompts.length > 0 ? prompts.shift() : defaultValue;
-};
-window.alert = (message) => { alerts.push(message); };
+// --- Red de seguridad: si algún código usara alert/prompt nativos,
+//     el navegador headless se bloquearía. ---
+window.alert = () => {};
+window.prompt = () => null;
 window.confirm = () => true;
+
+function waitFor(predicate, maxTicks = 400) {
+    return new Promise((resolve, reject) => {
+        // Se cuentan ticks y no milisegundos: el navegador headless corre
+        // con reloj virtual y Date.now() puede saltar de golpe.
+        let ticks = 0;
+        const tick = () => {
+            if (predicate()) return resolve();
+            if (++ticks > maxTicks) {
+                return reject(new Error("tiempo agotado esperando una condición"));
+            }
+            setTimeout(tick, 10);
+        };
+        tick();
+    });
+}
+
+function dialogOpen() {
+    return !document.getElementById("dialogRoot").classList.contains("hidden");
+}
 
 function click(selector) {
     const el = document.querySelector(selector);
@@ -60,6 +77,47 @@ function setValue(selector, value) {
 
 function cardCount() {
     return document.querySelectorAll(".productCard").length;
+}
+
+// --- Interacción con el sistema de diálogos de la app ---
+
+// Responde un diálogo que pide texto y confirma.
+//
+// OJO: al confirmar uno puede abrirse otro de inmediato (por ejemplo, el
+// de la contraseña después del nombre). Por eso acá NO se espera a que
+// el diálogo se cierre: se espera a que la cadena asiente.
+async function answerDialog(value) {
+    await waitFor(dialogOpen);
+    const input = document.querySelector("#dialogInput");
+    if (!input) throw new Error("El dialogo abierto no pide texto");
+
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    const buttons = document.querySelectorAll("#dialogActions button");
+    buttons[buttons.length - 1].click();
+
+    await new Promise(r => setTimeout(r, 100));
+}
+
+// Confirma el diálogo abierto (último botón: Aceptar / Entendido).
+async function acceptDialog() {
+    await waitFor(dialogOpen);
+    const buttons = document.querySelectorAll("#dialogActions button");
+    buttons[buttons.length - 1].click();
+    await waitFor(() => !dialogOpen());
+}
+
+// Cancela el diálogo abierto (primer botón: Cancelar).
+async function cancelDialog() {
+    await waitFor(dialogOpen);
+    const buttons = document.querySelectorAll("#dialogActions button");
+    buttons[0].click();
+    await waitFor(() => !dialogOpen());
+}
+
+function dialogText() {
+    return document.getElementById("dialogBody").textContent.trim();
 }
 
 try {
@@ -87,22 +145,41 @@ try {
         document.getElementById("welcomeSection").classList.contains("hidden") === false &&
         document.getElementById("appRoot").classList.contains("hidden") === true);
 
-    // Desde la landing se entra a la app
+    // =========================================================
+    // El sistema de diálogos
+    // =========================================================
     click("#welcomeGetStartedBt");
     ok("El boton Empezar entra a la app",
         document.getElementById("appRoot").classList.contains("hidden") === false &&
         document.getElementById("welcomeSection").classList.contains("hidden") === true);
 
-    // =========================================================
-    // Crear un perfil
-    // =========================================================
-    prompts.push("Mi Tienda", "1234");
-    click("#createProfileBt");
-    ok("Se abre el selector de tipo de negocio",
-        document.querySelector('[data-store-type="general"]') !== null);
+    // El dialogo no existe hasta que se pide algo.
+    ok("El dialogo arranca cerrado", !dialogOpen());
 
+    // Validacion: no deja confirmar un nombre vacio.
+    click("#createProfileBt");
     click('[data-store-type="general"]');
     click("#inventaryConfirmBt");
+    await waitFor(dialogOpen);
+    ok("Pedir un dato abre el dialogo de la app", dialogOpen());
+    ok("El dialogo pide un nombre de perfil",
+        document.querySelector("#dialogInput") !== null);
+
+    // Escribir vacio y aceptar: la validacion debe impedirlo.
+    document.querySelector("#dialogInput").value = "   ";
+    const buttons = document.querySelectorAll("#dialogActions button");
+    buttons[buttons.length - 1].click();
+    await new Promise(r => setTimeout(r, 120));
+    ok("La validacion impide confirmar un nombre vacio",
+        dialogOpen() && document.getElementById("dialogError").textContent.length > 0,
+        document.getElementById("dialogError").textContent);
+
+    // Ahora si, con un nombre valido.
+    await answerDialog("Mi Tienda");
+    ok("El dialogo pide la contrasena del perfil",
+        dialogOpen() && document.getElementById("dialogTitle").textContent.includes("Contraseña"),
+        document.getElementById("dialogTitle").textContent);
+    await answerDialog("1234");
 
     ok("El perfil se crea y se entra a la app",
         document.getElementById("appRoot").classList.contains("hidden") === false);
@@ -133,10 +210,10 @@ try {
     // =========================================================
     // Categorias
     // =========================================================
-    prompts.push("Bebidas");
     click("#newCategoryBt");
-    prompts.push("Snacks");
+    await answerDialog("Bebidas");
     click("#newCategoryBt");
+    await answerDialog("Snacks");
 
     click("#categoriesBt");
     const catCards = [...document.querySelectorAll(".categoryCard")];
@@ -175,7 +252,7 @@ try {
     // =========================================================
     // Ordenamiento numerico (bug del .sort() sin comparador)
     // =========================================================
-    click("#productsBt");   // salir de la categoria -> ver todos
+    click("#productsBt");
     for (const [name, price] of [["Barato", "9"], ["Caro", "1000"], ["Medio", "100"]]) {
         click("#addProduct");
         setValue("#newName", name);
@@ -207,10 +284,9 @@ try {
         document.getElementById("billTotal").textContent);
 
     click("#accumulateConfirmBt");
+    await acceptDialog();     // aviso de "Venta finalizada"
 
     const usuarios = JSON.parse(localStorage.getItem("menuStockUsers"));
-    // El perfil creado por la prueba es el ULTIMO: Juan y Maria son los
-    // perfiles por defecto que nacen en la primera visita.
     const miPerfil = usuarios.find(u => u.profile.name === "Mi Tienda");
     const venta = miPerfil && miPerfil.historial[0];
 
@@ -230,15 +306,107 @@ try {
         !!miPerfil && miPerfil.products.some(p => p.name.startsWith("Gaseosa") && p.quantity === 9),
         miPerfil ? miPerfil.products.map(p => `${p.name}:${p.quantity}`).join(", ") : "");
 
-    // =========================================================
-    // El historial de stock registra los movimientos
-    // =========================================================
     const movs = miPerfil ? miPerfil.stockHistory : [];
     ok("El historial de stock registra los movimientos",
         Array.isArray(movs) && movs.length > 0, `${movs.length} movimientos`);
     ok("Los movimientos tienen accion y delta",
         movs.every(m => m.action && typeof m.change === "number"),
         movs.map(m => `${m.action}:${m.change}`).join(", "));
+
+    // =========================================================
+    // MODULO DE COMPRAS A PROVEEDORES
+    // =========================================================
+    click("#purchasesBt");
+    ok("Se abre la vista de compras",
+        !document.getElementById("purchasesView").classList.contains("hidden"));
+    ok("La vista de productos se oculta al ir a Compras",
+        document.getElementById("productList").classList.contains("hidden"));
+    ok("No hay compras todavia",
+        document.querySelectorAll(".purchaseCard").length === 0);
+    ok("Se muestra el estado vacio de compras",
+        document.querySelector(".purchaseEmpty") !== null);
+
+    click("#newPurchaseBt");
+    await waitFor(() => document.getElementById("purchaseSupplier") !== null);
+    ok("Se abre el formulario de compra",
+        document.getElementById("purchaseSupplier") !== null);
+    ok("El formulario trae una linea de producto",
+        document.querySelectorAll(".purchaseLine[data-index]").length === 1);
+
+    setValue("#purchaseSupplier", "Distribuidora del Norte");
+
+    const line = document.querySelector(".purchaseLine[data-index]");
+    line.querySelector(".purchaseQty").value = "24";
+    line.querySelector(".purchaseQty").dispatchEvent(new Event("input", { bubbles: true }));
+    line.querySelector(".purchasePrice").value = "1500";
+    line.querySelector(".purchasePrice").dispatchEvent(new Event("input", { bubbles: true }));
+
+    ok("El total de la compra se calcula en vivo",
+        document.getElementById("purchaseTotal").textContent === "$36000",
+        document.getElementById("purchaseTotal").textContent);
+
+    // Agregar una segunda linea y quitarla de nuevo
+    click("#addPurchaseLineBt");
+    ok("Se puede agregar otra linea de producto",
+        document.querySelectorAll(".purchaseLine[data-index]").length === 2);
+
+    const removeButtons = document.querySelectorAll(".purchaseLineRemove");
+    removeButtons[1].click();
+    ok("Se puede quitar una linea de producto",
+        document.querySelectorAll(".purchaseLine[data-index]").length === 1);
+
+    click("#inventaryConfirmBt");
+    await acceptDialog();     // aviso de "Compra registrada"
+
+    ok("La compra queda listada",
+        document.querySelectorAll(".purchaseCard").length === 1,
+        `${document.querySelectorAll(".purchaseCard").length} tarjetas`);
+    ok("La compra muestra el proveedor",
+        document.querySelector(".purchaseCard .purchaseHead strong").textContent.trim() === "Distribuidora del Norte",
+        document.querySelector(".purchaseCard .purchaseHead strong").textContent);
+
+    const trasCompra = JSON.parse(localStorage.getItem("menuStockUsers")).find(u => u.profile.name === "Mi Tienda");
+    const gaseosaTrasCompra = trasCompra.products.find(p => p.name.startsWith("Gaseosa"));
+
+    ok("La compra suma el stock al producto",
+        gaseosaTrasCompra.quantity === 33,
+        `Gaseosa: ${gaseosaTrasCompra.quantity} (9 + 24)`);
+    ok("La compra queda guardada en el perfil",
+        Array.isArray(trasCompra.purchases) && trasCompra.purchases.length === 1);
+    ok("La compra guarda los items y el total",
+        trasCompra.purchases[0].items.length === 1 &&
+        trasCompra.purchases[0].items[0].cantidad === 24 &&
+        trasCompra.purchases[0].total === 36000,
+        JSON.stringify({ items: trasCompra.purchases[0].items, total: trasCompra.purchases[0].total }));
+    ok("La compra queda en el historial de stock",
+        trasCompra.stockHistory.some(m => m.action === "purchase" && m.change === 24),
+        trasCompra.stockHistory.map(m => `${m.action}:${m.change}`).join(", "));
+
+    // Ver detalle
+    click("[data-view-purchase]");
+    await waitFor(dialogOpen);
+    ok("El detalle de la compra se abre en un dialogo",
+        dialogOpen() &&
+        document.getElementById("dialogTitle").textContent.includes("Distribuidora del Norte") &&
+        dialogText().includes("Gaseosa"),
+        document.getElementById("dialogTitle").textContent);
+    await acceptDialog();
+
+    // Anular la compra
+    click("[data-void-purchase]");
+    await acceptDialog();     // confirmacion de anulacion
+
+    const trasAnular = JSON.parse(localStorage.getItem("menuStockUsers")).find(u => u.profile.name === "Mi Tienda");
+    const gaseosaTrasAnular = trasAnular.products.find(p => p.name.startsWith("Gaseosa"));
+
+    ok("Anular la compra devuelve el stock",
+        gaseosaTrasAnular.quantity === 9,
+        `Gaseosa: ${gaseosaTrasAnular.quantity} (vuelve a 9)`);
+    ok("La compra anulada queda marcada",
+        trasAnular.purchases[0].anulada === true);
+    ok("La anulacion queda en el historial de stock",
+        trasAnular.stockHistory.some(m => m.action === "purchaseVoid" && m.change === -24),
+        trasAnular.stockHistory.map(m => `${m.action}:${m.change}`).join(", "));
 
     // =========================================================
     // Migracion de claves antiguas
@@ -255,7 +423,8 @@ try {
         restockPreferences: {},
         historial: [],
         stockHistory: [],
-        categories: []
+        categories: [],
+        purchases: []
     }]));
     localStorage.setItem("currentInventoryUser", "legacy-1");
 
