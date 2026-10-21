@@ -1,0 +1,35 @@
+# Dependencias
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Entorno / secretos
+.env
+.env.local
+*.pem
+*.key
+
+# Builds / cache
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# Datos locales de la app (no se versionan)
+*.db
+*.sqlite
+*.sqlite3
