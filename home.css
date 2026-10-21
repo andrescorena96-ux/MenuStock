@@ -743,6 +743,12 @@ select.inp:focus {
 
 .selectionBar.hidden {
     display: none !important;
+
+    /* Red de seguridad: aunque algo intente mostrarlo, no se ve ni
+       recibe clics. */
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .selectionCount {
@@ -905,7 +911,9 @@ select.inp:focus {
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
 
-    z-index: 1000;
+    /* Por encima de la pantalla de perfiles (9999): si no, el modal
+       de "qué tipo de negocio" se abre detrás y no se puede usar. */
+    z-index: 10000;
     height: 100%;
 }
 
@@ -1887,6 +1895,12 @@ li:focus-visible {
 
 .hidden {
     display: none !important;
+
+    /* Red de seguridad: aunque algo intente mostrarlo, no se ve ni
+       recibe clics. */
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 
@@ -3299,6 +3313,12 @@ li:focus-visible {
 
 .dialogRoot.hidden {
     display: none !important;
+
+    /* Red de seguridad: aunque algo intente mostrarlo, no se ve ni
+       recibe clics. */
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .dialogBackdrop {

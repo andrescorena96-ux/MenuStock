@@ -229,6 +229,59 @@ try {
 
     // Validacion: no deja confirmar un nombre vacio.
     click("#createProfileBt");
+    await new Promise(r => setTimeout(r, 120));
+
+    // --- No debe haber dos capas superpuestas ---
+    const pantallaPerfiles = document.getElementById("profileSection");
+    const capaModal = document.getElementById("actionPan");
+
+    ok("El boton + Crear perfil es un boton de verdad",
+        document.getElementById("createProfileBt").tagName === "BUTTON" &&
+        document.getElementById("createProfileBt").type === "button",
+        `${document.getElementById("createProfileBt").tagName} type=${document.getElementById("createProfileBt").type}`);
+
+    ok("Al crear un perfil se oculta la pantalla de perfiles",
+        pantallaPerfiles.classList.contains("hidden"),
+        "la pantalla de perfiles sigue visible: se solaparia con el modal");
+
+    ok("El modal de tipo de negocio queda visible",
+        !capaModal.classList.contains("hidden"),
+        "el modal se abrio pero quedo oculto");
+
+    // Solo una capa visible a la vez
+    const capasVisibles = [
+        ["pantalla de perfiles", pantallaPerfiles],
+        ["modal de inventario", capaModal],
+        ["dialogo", document.getElementById("dialogRoot")]
+    ].filter(([, el]) => !el.classList.contains("hidden")).map(([nombre]) => nombre);
+
+    ok("Solo hay una capa visible a la vez",
+        capasVisibles.length === 1,
+        capasVisibles.join(" + "));
+
+    // El z-index del overlay tiene que estar por encima del de la
+    // pantalla de perfiles, si no el modal abre detrás.
+    const zOverlay = parseInt(getComputedStyle(capaModal).zIndex, 10);
+    const zPerfiles = parseInt(getComputedStyle(pantallaPerfiles).zIndex, 10);
+    ok("El modal se dibuja por encima de la pantalla de perfiles",
+        zOverlay > zPerfiles, `overlay=${zOverlay} perfiles=${zPerfiles}`);
+
+    // Cancelar el flujo tiene que devolver a la lista de perfiles
+    click("#inventaryCancelBt");
+    await new Promise(r => setTimeout(r, 180));
+
+    ok("Cancelar el flujo vuelve a la lista de perfiles",
+        !pantallaPerfiles.classList.contains("hidden") &&
+        capaModal.classList.contains("hidden"),
+        `perfiles=${!pantallaPerfiles.classList.contains("hidden")} modal=${!capaModal.classList.contains("hidden")}`);
+
+    // Y se puede volver a abrir sin quedar nada roto
+    click("#createProfileBt");
+    await new Promise(r => setTimeout(r, 150));
+    ok("Se puede volver a abrir el flujo de creacion",
+        !capaModal.classList.contains("hidden") &&
+        pantallaPerfiles.classList.contains("hidden"));
+
     click('[data-store-type="general"]');
     click("#inventaryConfirmBt");
     await waitFor(dialogOpen);

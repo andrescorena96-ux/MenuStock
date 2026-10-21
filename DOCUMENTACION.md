@@ -275,6 +275,9 @@ En tienda de ropa, debajo del bloque principal aparecen los **4 modos de variant
 
 ### 6.4 Crear un perfil
 
+> **Nota de implementación.** La pantalla de selección de perfiles y los modales de la app se **solapaban**: la pantalla tenía `z-index: 9999` y el overlay de los modales `1000`, así que el modal "¿Qué tipo de negocio vas a manejar?" se abría *detrás* y los clics no llegaban a él. Se corrigió por los dos lados: el overlay subió a `10000` y la pantalla de perfiles se oculta mientras el flujo de creación está abierto, volviendo al terminar o al cancelar. La clase `.hidden` además aplica `visibility: hidden`, `opacity: 0` y `pointer-events: none` como red de seguridad.
+
+
 El alta de perfil es un flujo de pasos:
 
 1. **Tipo de negocio** — *Tienda General*, *Tienda de Ropa* u *Otro*.
@@ -539,7 +542,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-**122 casos**, todos en verde:
+**129 casos**, todos en verde:
 
 - Arranque: carga del módulo, perfiles por defecto, landing, entrada a la app
 - Sistema de diálogos: apertura, validación que impide confirmar un valor vacío, encadenado de diálogos

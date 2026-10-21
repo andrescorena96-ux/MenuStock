@@ -145,7 +145,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre **122 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye la barra con menú por tarjeta, el formulario de alta a pantalla completa, los estados de stock, las mermas, el escandallo y los proveedores.
+Cubre **129 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye la barra con menú por tarjeta, el formulario de alta a pantalla completa, los estados de stock, las mermas, el escandallo y los proveedores.
 
 ---
 
@@ -258,6 +258,7 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | Dos productos con la misma inicial podían quedar con el MISMO id | El id lleva un fragmento de UUID: siempre es único |
 | Crear perfil pedía nombre y contraseña en diálogos sueltos | Formulario propio con nombre, negocio, color y contraseña opcional |
 | Merma, cambio de precio y borrado no se guardaban | `saveCurrentUser()` en las tres acciones del menú ⋮ |
+| Al crear un perfil se solapaban dos modales y el botón no respondía | El overlay sube por encima de la pantalla de perfiles y la pantalla se oculta durante el flujo |
 | Al guardar se perdia la busqueda activa | efreshProducts() pasa por el filtro de busqueda |
 | Una lista vacia dejaba el espacio en blanco | Estado vacio que explica por que no hay productos |
 | Editar un producto y mudarlo de categoria lo hacia desaparecer | El aviso dice donde quedo y ofrece ir a esa categoria |

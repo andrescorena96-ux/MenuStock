@@ -1217,8 +1217,30 @@ function showProfileForm() {
 
 
 /* ============================================================
-   4d. CREAR PERFIL: paso final (los datos)
-   Se llama después de elegir el tipo de negocio (y las tallas,
+   4d. FLUJO DE CREACIÓN DE PERFIL
+   La pantalla de perfiles y los modales se solapaban: el modal
+   "qué tipo de negocio" se abría DETRÁS de la lista de perfiles
+   y los clics no llegaban a él. Ahora la pantalla de perfiles se
+   oculta mientras el flujo está abierto y vuelve al terminar
+   (o al cancelar).
+   ============================================================ */
+
+// Abrir el flujo de creación de perfil
+function openProfileCreation() {
+    // Se oculta por completo: si no, las dos capas se superponen.
+    profileSection.classList.add("hidden");
+
+    selectedStoreType = null;
+    selectedSizeSystem = null;
+    pendingClothingConfig = null;
+
+    act = "storeType";
+    myInventaryActions('storeType');
+}
+
+/* ============================================================
+   4e. CREAR PERFIL: paso final (los datos)
+   Se llama después de elegir el tipo de negocio (y tallas,
    si es una tienda de ropa).
    ============================================================ */
 
@@ -1226,10 +1248,11 @@ async function finishProfileCreation() {
     const datos = await showProfileForm();
 
     if (!datos) {
+        // El usuario canceló el formulario: se vuelve a la lista.
         resetPendingProfileState();
+        showProfiles();
         return;
     }
-
     const users = getUsers();
     const alreadyExists = users.some(
         user => user.profile.name.toLowerCase() === datos.name.toLowerCase()
@@ -1241,6 +1264,7 @@ async function finishProfileCreation() {
             message: `Ya existe un perfil con el nombre "${datos.name}".`
         });
         resetPendingProfileState();
+        showProfiles();
         return;
     }
 
@@ -3533,18 +3557,14 @@ async function confirmButton() {
 
 function cancelCurrentAction() {
     switch (act) {
-        case 'storeType': {
-            selectedStoreType = null;
-            selectedSizeSystem = null;
-            pendingClothingConfig = null;
-            closeModal();
-            break;
-        }
+        case 'storeType':
         case 'clothingSizeSystem': {
             selectedStoreType = null;
             selectedSizeSystem = null;
             pendingClothingConfig = null;
             closeModal();
+            // Vuelve a la lista de perfiles: el flujo se abortó.
+            showProfiles();
             break;
         }
         case 'addProduct':
@@ -4633,17 +4653,7 @@ passwordGateBackBt.addEventListener("click", () => {
     showProfiles();
 });
 
-document.getElementById("createProfileBt").addEventListener("click", () => {
-    // El primer paso de crear un perfil ahora es elegir el tipo de
-    // negocio; el nombre y la contraseña se piden al final, una vez
-    // que sabemos si hace falta configurar algo más (p. ej. ropa).
-    selectedStoreType = null;
-    selectedSizeSystem = null;
-    pendingClothingConfig = null;
-
-    act = "storeType";
-    myInventaryActions("storeType");
-});
+createProfileBt.addEventListener("click", openProfileCreation);
 
 // --- Profile menu (topbar) ---
 profileButton.addEventListener("click", () => {
