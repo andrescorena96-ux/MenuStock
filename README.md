@@ -6,6 +6,16 @@ App web estática — HTML, CSS y JavaScript vanilla, sin dependencias ni build 
 
 ---
 
+## 🌐 Abrir la app
+
+**[https://andrescorena96-ux.github.io/MenuStock/](https://andrescorena96-ux.github.io/MenuStock/)**
+
+Publicada con **GitHub Pages**: se abre directo en el navegador, sin instalar nada.
+
+> Los datos se guardan en el navegador del dispositivo (`localStorage`). Cada quien ve su propio inventario; no hay servidor ni sincronización entre dispositivos. Para respaldar, la app tiene *Exportar datos* en el menú del perfil.
+
+---
+
 ## Puesta en marcha
 
 El script principal se carga como módulo ES (`<script type="module">`), y los módulos **no funcionan abriendo el archivo con `file://`** (CORS los bloquea). Hay que servirlo por HTTP:

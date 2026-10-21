@@ -112,7 +112,7 @@ function extractResults(dom) {
     const server = await startServer();
     console.log(`Servidor de pruebas en http://localhost:${PORT}\n`);
 
-    const dom = await runHeadless(browser, `http://localhost:${PORT}/tests/e2e.html`);
+    const dom = await runHeadless(browser, `http://localhost:${PORT}/tests/e2e.html?ejecutar`);
     server.close();
 
     const results = extractResults(dom);

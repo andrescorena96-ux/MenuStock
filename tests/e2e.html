@@ -144,6 +144,14 @@ async function openEditor() {
 }
 
 try {
+    // Esta prueba BORRA los datos de la app en el localStorage del
+    // sitio. Solo se ejecuta cuando se pide expresamente con ?ejecutar,
+    // para que abrirla por accidente en el sitio publicado no borre
+    // el inventario de nadie.
+    if (!new URLSearchParams(location.search).has("ejecutar")) {
+        throw new Error("__SIN_EJECUTAR__");
+    }
+
     // =========================================================
     // Montar la app real
     // =========================================================
@@ -849,7 +857,9 @@ try {
         `${document.querySelectorAll(".sizeCheck").length} casillas`);
 
 } catch (error) {
-    fail("excepcion no controlada", error);
+    if (error.message !== "__SIN_EJECUTAR__") {
+        fail("excepcion no controlada", error);
+    }
 }
 
 // El bloque de resultados se vuelve a pegar: body.innerHTML lo habia borrado.
