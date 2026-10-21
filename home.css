@@ -1,14 +1,14 @@
 /* =========================================================
    INVENTARIO — VISUAL SYSTEM
 
-   A corner-store ledger: oxblood + rust + marigold on warm
-   paper, like a hand-stamped price tag. Header and the
-   actions bar sit in dark oxblood as anchors; the product
-   grid and search live on light paper; the restock sheet is
-   its own dark, tactile surface.
+   Una libreta de tienda de barrio: oxblood, rust y marigold sobre
+   papel tibio, como una etiqueta de precio sellada a mano. La cabecera
+   y la barra de acciones van en oxblood oscuro como anclas; la cuadrícula
+   de productos y la búsqueda viven sobre papel claro; la hoja de
+   reposición es una superficie oscura y táctil aparte.
 
-   Fonts: Fraunces (display — wordmark, section titles only)
-          Archivo  (everything else)
+   Tipografías: Fraunces (display — marca y títulos de sección)
+                  Archivo  (todo lo demás)
    ========================================================= */
 
 * {
@@ -93,7 +93,7 @@ body {
 
 
 /* =========================================================
-   HEADER
+   CABECERA
    ========================================================= */
 
 header {
@@ -119,7 +119,7 @@ header {
     box-shadow: 0 6px 20px rgba(20, 8, 10, 0.3);
 }
 
-/* title + restock, grouped on the left */
+/* título + reposición, agrupados a la izquierda */
 .headerBrand {
     display: flex;
     align-items: center;
@@ -170,7 +170,7 @@ header h1 {
 
 
 /* =========================================================
-   MAIN LAYOUT
+   ESTRUCTURA PRINCIPAL
    ========================================================= */
 
 .main {
@@ -197,7 +197,7 @@ header h1 {
 
 
 /* =========================================================
-   SEARCH PANEL
+   PANEL DE BÚSQUEDA
    ========================================================= */
 
 .searchPan {
@@ -246,7 +246,7 @@ label {
 
 
 /* =========================================================
-   INPUTS
+   CAMPOS DE ENTRADA
    ========================================================= */
 
 .inventorySearch,
@@ -296,7 +296,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   PRODUCT GRID
+   CUADRÍCULA DE PRODUCTOS
    ========================================================= */
 
 .productList {
@@ -326,7 +326,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   PRODUCT CARD
+   TARJETA DE PRODUCTO
    ========================================================= */
 
 .productCard {
@@ -407,7 +407,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   ACTIONS BAR
+   BARRA DE ACCIONES
    ========================================================= */
 
 .actions {
@@ -461,7 +461,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   SHARED BUTTONS (modal / panel footers)
+   BOTONES COMPARTIDOS (pies de modales y paneles)
    ========================================================= */
 
 .buttons {
@@ -517,8 +517,8 @@ select.inp:focus {
 
 
 /* =========================================================
-   INVENTORY ACTION MODAL / OVERLAY
-   (positioning unchanged — colors only)
+   MODAL DE ACCIONES DE INVENTARIO / OVERLAY
+   (la posición no cambia — solo los colores)
    ========================================================= */
 
 .overlay {
@@ -539,7 +539,7 @@ select.inp:focus {
     height: 70em;
 }
 
-/* Outer modal shell — sizing/position kept exactly as-is */
+/* Contenedor exterior del modal — tamaño y posición tal cual */
 #modali {
     position: fixed !important;
     inset: 0 !important;
@@ -591,7 +591,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   PRODUCT CREATION FORM
+   FORMULARIO DE ALTA DE PRODUCTO
    ========================================================= */
 
 #modalTitle {
@@ -639,8 +639,8 @@ select.inp:focus {
 
 
 /* =========================================================
-   RESTOCK MODAL — dark ledger sheet
-   Positioning / sizing kept exactly as resolved before.
+   MODAL DE REPOSICIÓN — hoja oscura de libreta
+   La posición y el tamaño quedan tal como se resolvieron antes.
    ========================================================= */
 
 #modali-content .restockModalContainer {
@@ -703,7 +703,7 @@ select.inp:focus {
     color: var(--panel-text-mute);
 }
 
-/* Restock search — kept white for contrast, as before */
+/* Buscador de reposición — se mantiene claro para contraste */
 #modali-content #restockFilter {
     flex-shrink: 0;
     margin-bottom: 0.8rem !important;
@@ -728,7 +728,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   RESTOCK LIST
+   LISTA DE REPOSICIÓN
    ========================================================= */
 
 .restockScrollArea {
@@ -755,7 +755,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   RESTOCK ITEM
+   FILA DE REPOSICIÓN
    ========================================================= */
 
 .restockItem {
@@ -810,7 +810,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   RESTOCK INPUTS
+   CAMPOS DE REPOSICIÓN
    ========================================================= */
 
 .restockInputs {
@@ -866,7 +866,7 @@ select.inp:focus {
     box-shadow: 0 0 0 3px rgba(220, 70, 55, 0.14), 0 0 14px rgba(220, 70, 55, 0.1);
 }
 
-/* Keyboard nav — clearly visible */
+/* Navegación con teclado — bien visible */
 .restockItem select:focus-visible,
 .restockItem input:focus-visible {
     border-color: var(--marigold) !important;
@@ -875,8 +875,8 @@ select.inp:focus {
 
 
 /* =========================================================
-   BILL PANEL / ACCUMULATE PANEL
-   Positioning unchanged — colors refreshed.
+   PANEL DE CUENTA / PANEL ACUMULADOR
+   La posición no cambia — los colores se actualizaron.
    ========================================================= */
 
 .modal {
@@ -1004,8 +1004,8 @@ select.inp:focus {
 
 
 /* =========================================================
-   PROFILE SCREEN
-   Positioning unchanged — colors refreshed.
+   PANTALLA DE PERFILES
+   La posición no cambia — los colores se actualizaron.
    ========================================================= */
 
 .profileSection {
@@ -1161,7 +1161,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   PROFILE BUTTON (header)
+   BOTÓN DE PERFIL (cabecera)
    ========================================================= */
 
 .profileButton {
@@ -1211,8 +1211,8 @@ select.inp:focus {
 
 
 /* =========================================================
-   PROFILE MENU
-   Positioning unchanged — colors refreshed.
+   MENÚ DE PERFIL
+   La posición no cambia — los colores se actualizaron.
    ========================================================= */
 
 .profileMenu {
@@ -1322,7 +1322,7 @@ select.inp:focus {
 
 
 /* =========================================================
-   KEYBOARD ACCESSIBILITY
+   ACCESIBILIDAD CON TECLADO
    ========================================================= */
 
 button:focus-visible,
@@ -1335,7 +1335,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   HIDDEN
+   OCULTO
    ========================================================= */
 
 .hidden {
@@ -1344,7 +1344,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   REDUCED MOTION
+   MOVIMIENTO REDUCIDO
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1356,7 +1356,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   RESPONSIVE
+   RESPONSIVO
    ========================================================= */
 
 @media (max-width: 700px) {
@@ -1968,7 +1968,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   RESPONSIVE
+   RESPONSIVO
    ========================================================= */
 
 @media (max-width: 700px) {
@@ -2004,7 +2004,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   CREATUSSINESS — WELCOME / LANDING PAGE
+   MENÚSTOCK — PÁGINA DE BIENVENIDA / LANDING
    Vista independiente montada antes de #appRoot. Reutiliza
    los tokens ya definidos en :root; no define paleta nueva.
    ========================================================= */
@@ -2174,7 +2174,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   BUTTONS
+   BOTONES
    --------------------------------------------------------- */
 
 .welcomeCta {
@@ -2222,7 +2222,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   TEXT BLOCKS
+   BLOQUES DE TEXTO
    --------------------------------------------------------- */
 
 .welcomeKicker {
@@ -2260,7 +2260,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   MISSION GRID
+   CUADRÍCULA DE MISIÓN
    --------------------------------------------------------- */
 
 .missionGrid {
@@ -2298,7 +2298,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   OFFER / FIT CARDS
+   TARJETAS DE OFRECIMIENTOS Y TIPOS DE NEGOCIO
    --------------------------------------------------------- */
 
 .offerGrid,
@@ -2354,7 +2354,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   FINAL MESSAGE
+   MENSAJE FINAL
    --------------------------------------------------------- */
 
 .welcomeFinal {
@@ -2391,9 +2391,9 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   STORE TYPE PICKER
-   Reutiliza el contenedor centrado de #modali (Restock/
-   Historial), solo se añaden estilos para su contenido.
+   SELECTOR DE TIPO DE NEGOCIO
+   Reutiliza el contenedor centrado de #modali (Reposición/
+   Historial); solo se añaden estilos para su contenido.
    ---------------------------------------------------------*/
 
 .storeTypeGrid {
@@ -2446,7 +2446,7 @@ li:focus-visible {
 
 
 /* ---------------------------------------------------------
-   RESPONSIVE
+   RESPONSIVO
    --------------------------------------------------------- */
 
 @media (max-width: 700px) {
@@ -2470,7 +2470,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   CREATUSSINESS — CONTRASEÑA DE PERFIL
+   MENÚSTOCK — CONTRASEÑA DE PERFIL
    Reutiliza .profileSection / .profilePanel / .profileMenuHeader
    ya definidos; solo se agrega el estado de error.
    ========================================================= */
@@ -2491,7 +2491,7 @@ li:focus-visible {
 
 
 /* =========================================================
-   CREATUSSINESS — CONFIGURACIÓN DE ROPA (Add Product)
+   MENÚSTOCK — CONFIGURACIÓN DE ROPA (Agregar producto)
    ========================================================= */
 
 .clothingProductBlock {

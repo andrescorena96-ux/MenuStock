@@ -20,6 +20,14 @@ Luego abrir <http://localhost:8080>.
 
 ---
 
+## Idioma
+
+La app está **completamente en español**: interfaz, landing, mensajes de error y comentarios del código.
+
+Las únicas palabras en inglés que quedan son identificadores técnicos que no se ven en pantalla (`restockModalContainer`, `parseRestockExpression`, `stockHistory`, etc.).
+
+---
+
 ## Estructura
 
 ```
@@ -84,14 +92,24 @@ Todo vive en `localStorage`, en la clave `inventoryUsers`. Cada **perfil** es un
 }
 ```
 
-### Expresiones de restock
+### Claves de `localStorage`
+
+| Clave | Contenido |
+|---|---|
+| `menuStockUsers` | Todos los perfiles (array) |
+| `menuStockCurrentUser` | Id del último perfil usado |
+| `menuStockWelcomeSeen` | `"true"` si ya se vio la página de bienvenida |
+
+Las versiones anteriores de la app usaban `inventoryUsers`, `currentInventoryUser` y `creatussinessWelcomeSeen`. La app **migra esos datos automáticamente** la primera vez que se abre y borra las claves viejas.
+
+### Expresiones de reposición
 
 El campo de cantidad acepta sumas y restas. **El primer número usa el empaque elegido**, los siguientes son unidades sueltas:
 
 ```
-Sixpack · 2 + 16   →  2×6 + 16 = 28 unidades
-Caja    · 3        →  3×12 = 36 unidades
-Ninguno · -3       →  descuenta 3 unidades (sin conversión)
+Paquete de 6 · 2 + 16   →  2×6 + 16 = 28 unidades
+Caja (x12)   · 3        →  3×12 = 36 unidades
+Ninguno      · -3       →  descuenta 3 unidades (sin conversión)
 ```
 
 La entrada se valida con una expresión regular y se suma término a término: **el texto del usuario nunca se ejecuta como código**.

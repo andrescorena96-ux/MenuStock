@@ -27,7 +27,7 @@ const categoriesBt = document.getElementById("categoriesBt");
 const newCategoryBt = document.getElementById("newCategoryBt");
 const historyBt = document.getElementById("historyBt");
 
-// Welcome / landing (Creatussiness)
+// Bienvenida / landing (MenúStock)
 const appRoot = document.getElementById("appRoot");
 const welcomeSection = document.getElementById("welcomeSection");
 const welcomeGetStartedBt = document.getElementById("welcomeGetStartedBt");
@@ -102,9 +102,15 @@ let bill = 0;
 let myList = [];
 let act = "bill";
 
-const USERS_KEY = "inventoryUsers";
-const CURRENT_USER_KEY = "currentInventoryUser";
-const WELCOME_SEEN_KEY = "creatussinessWelcomeSeen";
+const USERS_KEY = "menuStockUsers";
+const CURRENT_USER_KEY = "menuStockCurrentUser";
+const WELCOME_SEEN_KEY = "menuStockWelcomeSeen";
+
+// Claves de versiones anteriores de la app. Se leen una sola vez
+// para migrar los datos y luego se eliminan.
+const USERS_KEY_LEGACY = "inventoryUsers";
+const CURRENT_USER_KEY_LEGACY = "currentInventoryUser";
+const WELCOME_SEEN_KEY_LEGACY = "creatussinessWelcomeSeen";
 
 // Tipos de negocio disponibles al crear un perfil.
 // "other" usa la misma configuración general que "general" por ahora.
@@ -151,7 +157,7 @@ const MAX_HISTORY = 1000;
 // Opciones de empaque del Restock. "none" = sin conversión, unidades directas.
 const PACK_OPTIONS = [
     { value: "1", label: "Unidad (x1)" },
-    { value: "6", label: "Sixpack (x6)" },
+    { value: "6", label: "Paquete de 6 (x6)" },
     { value: "12", label: "Caja (x12)" },
     { value: "24", label: "Caja (x24)" },
     { value: "none", label: "Ninguno (unidades directas)" }
@@ -159,7 +165,7 @@ const PACK_OPTIONS = [
 
 const ACTION_LABELS = {
     created: "Producto creado",
-    restock: "Restock",
+    restock: "Reposición",
     adjustment: "Ajuste manual",
     sale: "Venta",
     deleted: "Producto eliminado"
@@ -175,10 +181,52 @@ const ACTION_LABELS = {
 // ----------------------------------------
 function getUsers() {
     const savedUsers = localStorage.getItem(USERS_KEY);
-    if (!savedUsers) {
-        return [];
+
+    if (savedUsers) {
+        return JSON.parse(savedUsers);
     }
-    return JSON.parse(savedUsers);
+
+    // Migración: los datos de las versiones anteriores de la app
+    // vivían bajo otras claves. Se copian una vez y se borra la vieja.
+    const legacyUsers = localStorage.getItem(USERS_KEY_LEGACY);
+    if (legacyUsers) {
+        localStorage.setItem(USERS_KEY, legacyUsers);
+        localStorage.removeItem(USERS_KEY_LEGACY);
+        return JSON.parse(legacyUsers);
+    }
+
+    return [];
+}
+
+// ----------------------------------------
+// GET LAST USED USER
+// ----------------------------------------
+function getLastUserId() {
+    const id = localStorage.getItem(CURRENT_USER_KEY);
+    if (id) return id;
+
+    const legacyId = localStorage.getItem(CURRENT_USER_KEY_LEGACY);
+    if (legacyId) {
+        localStorage.setItem(CURRENT_USER_KEY, legacyId);
+        localStorage.removeItem(CURRENT_USER_KEY_LEGACY);
+        return legacyId;
+    }
+
+    return null;
+}
+
+// ----------------------------------------
+// ¿YA SE VIO LA PÁGINA DE BIENVENIDA?
+// ----------------------------------------
+function wasWelcomeSeen() {
+    if (localStorage.getItem(WELCOME_SEEN_KEY) === "true") return true;
+
+    const legacy = localStorage.getItem(WELCOME_SEEN_KEY_LEGACY) === "true";
+    if (legacy) {
+        localStorage.setItem(WELCOME_SEEN_KEY, "true");
+        localStorage.removeItem(WELCOME_SEEN_KEY_LEGACY);
+    }
+    return legacy;
 }
 
 // ----------------------------------------
@@ -244,7 +292,7 @@ function createDefaultUsers() {
         },
         {
             id: crypto.randomUUID(),
-            profile: { name: "Maria" },
+            profile: { name: "María" },
             password: null,
             storeType: "general",
             clothingConfig: null,
@@ -444,7 +492,7 @@ modalcont.addEventListener("keydown", handleRestockKeydown);
 
 
 /* ============================================================
-   3e. WELCOME / LANDING (Creatussiness)
+   3e. BIENVENIDA / LANDING (MenúStock)
    Vista independiente montada delante de #appRoot. No decide
    nada sobre perfiles: solo se interpone antes de que el
    usuario los vea, la primera vez que abre la app.
@@ -517,6 +565,7 @@ function selectProfile(userId) {
 
     // Guardamos cuál fue el último perfil usado
     localStorage.setItem(CURRENT_USER_KEY, user.id);
+    localStorage.removeItem(CURRENT_USER_KEY_LEGACY);
 
     // Conectamos los datos del perfil
     products = currentUser.products;
@@ -531,7 +580,7 @@ function selectProfile(userId) {
     if (!Array.isArray(currentUser.categories)) {
         currentUser.categories = [];
     }
-    // Perfiles creados antes de Creatussiness no tienen tipo de negocio.
+    // Perfiles creados antes de MenúStock no tienen tipo de negocio.
     // Cualquier valor que no sea uno de los 3 tipos actuales
     // (versiones anteriores de esta app llegaron a usar "drinks",
     // "food", "bakery", "beauty") cae en "general", que es la misma
@@ -676,7 +725,7 @@ function initializeProfiles() {
     createDefaultUsers();
 
     const users = getUsers();
-    const lastUserId = localStorage.getItem(CURRENT_USER_KEY);
+    const lastUserId = getLastUserId();
 
     // Si existe un perfil usado anteriormente, lo cargamos automáticamente...
     if (lastUserId) {
@@ -1222,16 +1271,16 @@ function filterAn() {
    ============================================================ */
 
 function updateBill() {
-    // Close the panel
+    // Cerrar el panel
     accumulatePanel.classList.remove("show");
     accumulatePanel.classList.add("closing");
 
-    // Reset the accumulator state
+    // Reiniciar el estado del acumulador
     bill = 0;
     myList = [];
 
-    // VERY IMPORTANT:
-    // After any action is finished/cancelled, return to normal bill mode.
+    // MUY IMPORTANTE:
+    // Al terminar o cancelar cualquier acción, se vuelve al modo cuenta.
     act = "bill";
 }
 
@@ -1342,7 +1391,7 @@ function confirmButton() {
             let myStock = newStock.valueAsNumber;
 
             if (newName.value.trim() === "" || newPrice.value.trim() === "") {
-                alert("Name or price empty; these are required");
+                alert("El nombre y el precio son obligatorios.");
                 return;
             }
 
@@ -1573,15 +1622,15 @@ function confirmButton() {
             refreshProducts();
             alert("Precio actualizado.");
 
-            // Clear change-price queue
+            // Vaciar la cola de cambio de precio
             myList = [];
             act = "bill";
 
-            // Close panel
+            // Cerrar el panel
             accumulatePanel.classList.remove("show");
             accumulatePanel.classList.add("closing");
 
-            // Make sure Accept is visible next time
+            // Asegurar que "Aceptar" quede visible la próxima vez
             accConfirmBt.classList.remove("hidden");
             break;
         }
@@ -1614,11 +1663,11 @@ function confirmButton() {
                 }
             }
 
-            // Save sale BEFORE clearing myList
+            // Guardar la venta ANTES de vaciar myList
             addToHistorial();
             alert(`Venta finalizada. Total: $${bill}`);
 
-            // Reset everything
+            // Reiniciar todo
             bill = 0;
             myList = [];
             act = "bill";
@@ -1730,8 +1779,8 @@ function myInventaryActions(action) {
                 <div class="restockModalContainer show">
                     <h3>¿Qué tipo de negocio vas a manejar?</h3>
                     <p class="restockHint">
-                        Esto ayuda a Creatussiness a adaptar el inventario y el
-                        Restock a cómo funciona tu negocio.
+                        Esto ayuda a MenúStock a adaptar el inventario y la
+                        reposición a cómo funciona tu negocio.
                     </p>
 
                     <div class="storeTypeGrid">
@@ -2102,11 +2151,11 @@ function myInventaryActions(action) {
 
             modalcont.innerHTML = `
                 <div class="restockModalContainer show">
-                    <h3>Reabastecer Inventario (Restock)</h3>
+                    <h3>Reponer inventario</h3>
                     <p class="restockHint">
                         Puedes escribir sumas y restas. El primer número usa el empaque elegido
                         y los siguientes son unidades sueltas:
-                        <code>Sixpack · 2 + 16</code> = 28 unidades.
+                        <code>Paquete de 6 · 2 + 16</code> = 28 unidades.
                         Con <code>Ninguno</code> no hay conversión, así que <code>-3</code> descuenta 3 unidades.
                     </p>
                     <input type="text" id="restockFilter" class="inventorySearch inp" placeholder="Filtrar por nombre..." style="margin-bottom: 1rem; width: 100%;">
@@ -2122,7 +2171,7 @@ function myInventaryActions(action) {
                 </div>
             `;
 
-            // Filtrado rápido dinámico
+            // Filtrado rápido y dinámico
             const restockFilter = document.getElementById("restockFilter");
             restockFilter.addEventListener("input", () => {
                 const query = restockFilter.value.toLowerCase();
@@ -2228,14 +2277,14 @@ function myInventaryActions(action) {
 
 function displayBill(billListObj) {
     if (!billListObj) {
-        console.error("billListObj does not exist");
+        console.error("billListObj no existe");
         return;
     }
 
     billListObj.innerHTML = "";
 
     for (let consumedProduct of myList) {
-        console.log("Rendering bill product:", consumedProduct);
+        console.log("Renderizando producto de la cuenta:", consumedProduct);
 
         billListObj.innerHTML += `
             <div class="billItem" data-id="${consumedProduct.id}">
@@ -2282,7 +2331,7 @@ function accumulateActions(action, event) {
     console.log("FOUND PRODUCT:", product);
 
     if (!product) {
-        console.error("Product not found. Card ID:", card.dataset.id);
+        console.error("Producto no encontrado. ID de tarjeta:", card.dataset.id);
         return;
     }
 
@@ -2293,7 +2342,7 @@ function accumulateActions(action, event) {
 
     switch (action) {
         case 'bill': {
-            // Add product to the bill
+            // Agregar el producto a la cuenta
             if (obj === undefined) {
                 myList.push({
                     id: product.id,
@@ -2306,10 +2355,10 @@ function accumulateActions(action, event) {
                 obj.quantity += 1;
             }
 
-            // Add price to total
+            // Sumar el precio al total
             bill += Number(product.price);
 
-            // Create the bill panel
+            // Crear el panel de la cuenta
             accModalContent.innerHTML = `
                     <div class="billHeader">
                         <h2>Cuenta</h2>
@@ -2319,13 +2368,13 @@ function accumulateActions(action, event) {
                     <div id="billList" class="billList"></div>
                 `;
 
-            // Get the newly-created list
+            // Obtener la lista recién creada
             const billListObj = document.getElementById("billList");
 
-            // Render products
+            // Renderizar los productos
             displayBill(billListObj);
 
-            // Handle minus/delete buttons
+            // Manejar los botones de menos y eliminar
             billListObj.addEventListener("click", (event) => {
                 const billItem = event.target.closest(".billItem");
                 if (!billItem) return;
@@ -2334,7 +2383,7 @@ function accumulateActions(action, event) {
                 const billProduct = myList.find(item => String(item.id) === String(productId));
                 if (!billProduct) return;
 
-                // MINUS
+                // MENOS
                 if (event.target.classList.contains("minusButton")) {
                     if (billProduct.quantity === 1) {
                         deleteItem(billProduct, billListObj);
@@ -2348,7 +2397,7 @@ function accumulateActions(action, event) {
                     bill -= Number(billProduct.price);
                     displayBill(billListObj);
                 }
-                // DELETE
+                // ELIMINAR
                 else if (event.target.classList.contains("deleteItem")) {
                     deleteItem(billProduct, billListObj);
                     if (myList.length === 0) {
@@ -2369,7 +2418,7 @@ function accumulateActions(action, event) {
                     currentPrice: product.price
                 });
             } else {
-                alert("You already added this product to the change price queue");
+                alert("Ya agregaste este producto a la lista de cambio de precio.");
                 return;
             }
 
@@ -2404,7 +2453,7 @@ function accumulateActions(action, event) {
                     createdIn: product.createdIn
                 });
             } else {
-                alert("You already added this product to the delete queue");
+                alert("Ya agregaste este producto a la lista de eliminación.");
                 return;
             }
 
@@ -2680,7 +2729,7 @@ historyBt.addEventListener("click", () => {
     myInventaryActions('history');
 });
 
-// --- Welcome / landing (Creatussiness) ---
+// --- Bienvenida / landing (MenúStock) ---
 welcomeGetStartedBt.addEventListener("click", enterApp);
 welcomeMakeItYoursBt.addEventListener("click", enterApp);
 welcomeFinalCtaBt.addEventListener("click", enterApp);
@@ -2695,7 +2744,7 @@ welcomeOriginBt.addEventListener("click", () => {
 
 // Volver a la Welcome page desde dentro de la app, sin cerrar
 // sesión ni tocar el flag de "ya vista": al presionar de nuevo
-// "Get started" / "Create your profile", enterApp() te regresa
+// "Empezar" / "Crea tu perfil", enterApp() te regresa
 // exactamente a donde estabas (perfil y productos siguen en memoria).
 backToWelcomeBt.addEventListener("click", showWelcomeOnly);
 
@@ -2713,7 +2762,7 @@ overlay.classList.add("hidden");
 // o después de la Welcome page es este flag.
 initializeProfiles();
 
-if (localStorage.getItem(WELCOME_SEEN_KEY) === "true") {
+if (wasWelcomeSeen()) {
     enterApp();
 } else {
     showWelcomeOnly();
