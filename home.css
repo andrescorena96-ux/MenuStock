@@ -179,11 +179,15 @@ body {
    visible al pie, sin quedar bajo el pliegue.
    ========================================================= */
 
+/* La app es un contenedor de altura exacta: la grilla scrollea por
+   dentro y la barra de acciones queda siempre visible al pie, sin
+   quedar bajo el pliegue. */
 #appRoot {
     display: flex;
     flex-direction: column;
 
-    min-height: 100vh;
+    height: 100vh;
+    height: 100dvh;
 }
 
 .main {
@@ -447,10 +451,10 @@ select.inp:focus {
     gap: 0.6rem;
 }
 
-/* La fila secundaria: dos botones al 50% */
+/* La fila secundaria: tres botones al 33% */
 .actionsRow {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 0.6rem;
 
     width: 100%;
@@ -1782,9 +1786,13 @@ li:focus-visible {
     .actBtn {
         min-height: 2.75rem;
 
-        padding: 0 0.7rem;
+        padding: 0 0.55rem;
 
-        font-size: 0.82rem;
+        font-size: 0.78rem;
+    }
+
+    .actionsRow {
+        grid-template-columns: 1fr;
     }
 
     .productFormModal {
@@ -3839,4 +3847,56 @@ li:focus-visible {
     .productFormModal .clothingProductBlock .productInputs {
         grid-template-columns: 1fr;
     }
+}
+
+/* =========================================================
+   LISTA VACÍA
+   Cuando no hay nada que mostrar se explica por qué, en vez de
+   dejar el espacio en blanco.
+   ========================================================= */
+
+.productListEmpty {
+    grid-column: 1 / -1;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+
+    padding: 2.5rem 1.2rem;
+
+    background: var(--white);
+    border: 1px dashed var(--beige);
+    border-radius: var(--radius-md);
+
+    color: var(--ink-mute);
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.productListEmptyIcon {
+    font-size: 2rem;
+    line-height: 1;
+    opacity: 0.65;
+}
+
+.productListEmpty p {
+    margin: 0;
+}
+
+
+/* Botón secundario dentro de un aviso */
+.dialogActions .ghostBt {
+    background: transparent;
+    color: var(--ink-soft);
+
+    border: 1px solid var(--beige);
+}
+
+.dialogActions .ghostBt:hover {
+    background: var(--paper);
+    border-color: var(--rust-light);
+    color: var(--ink);
 }

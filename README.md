@@ -135,7 +135,7 @@ npm test
 
 Levanta su propio servidor en el puerto 8123, abre `tests/e2e.html` en Edge o Chrome headless y lee el resultado del DOM.
 
-Cubre **77 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
+Cubre **103 casos**: arranque, landing, sistema de diálogos (incluida la validación), creación de perfil, **escapado de HTML (XSS)**, persistencia del filtro de categoría, ordenamiento numérico de precios, venta, historial de stock, **compras a proveedores** (alta, total en vivo, anular, devolución de stock) y migración de las claves antiguas de `localStorage`. Incluye el modo visible de la barra de acciones y el formulario de alta a pantalla completa.
 
 ---
 
@@ -234,6 +234,9 @@ La entrada se valida con una expresión regular y se suma término a término: *
 | El formulario de alta salía recortado en una esquina | Tarjeta centrada de 800 px con rejilla de dos columnas |
 | Un `<header>` dentro del formulario heredaba la cabecera oxblood de la app | El selector `header` global se acotó a `#appRoot > header` |
 | La barra de acciones quedaba bajo el pliegue | La app ocupa el alto del viewport y la grilla se estira |
+| Al guardar se perdia la busqueda activa | efreshProducts() pasa por el filtro de busqueda |
+| Una lista vacia dejaba el espacio en blanco | Estado vacio que explica por que no hay productos |
+| Editar un producto y mudarlo de categoria lo hacia desaparecer | El aviso dice donde quedo y ofrece ir a esa categoria |
 | `prompt()`/`alert()`/`confirm()` nativos bloqueaban la pantalla | Capa de diálogos propios con validación en línea |
 
 ---

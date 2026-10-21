@@ -120,6 +120,29 @@ function dialogText() {
     return document.getElementById("dialogBody").textContent.trim();
 }
 
+// El formulario se queda en el DOM aunque el modal este cerrado,
+// asi que hay que esperar a que este realmente abierto.
+function waitForForm() {
+    return waitFor(() =>
+        !document.getElementById("actionPan").classList.contains("hidden") &&
+        document.querySelector(".productFormModal") !== null
+    );
+}
+
+// Abre el editor de un producto: se asegura de que el modo este
+// activo (un clic en el boton lo alterna) y abre el primer producto.
+async function openEditor() {
+    if (document.getElementById("editProduct").classList.contains("active")) {
+        click("#editProduct");
+        await new Promise(r => setTimeout(r, 80));
+    }
+    click("#editProduct");
+    await new Promise(r => setTimeout(r, 80));
+
+    click(".productCard");
+    await waitForForm();
+}
+
 try {
     // =========================================================
     // Montar la app real
@@ -214,6 +237,14 @@ try {
     await answerDialog("Bebidas");
     click("#newCategoryBt");
     await answerDialog("Snacks");
+
+    // A "Bebidas" se le agrega una subcategoria, para poder probar
+    // tambien el cambio de subcategoria.
+    click("#categoriesBt");
+    const botonSubcat = [...document.querySelectorAll("[data-add-sub]")]
+        .find(b => b.closest(".categoryCard").querySelector(".categoryName").textContent.trim() === "Bebidas");
+    botonSubcat.click();
+    await answerDialog("Gaseosas");
 
     click("#categoriesBt");
     const catCards = [...document.querySelectorAll(".categoryCard")];
@@ -400,6 +431,228 @@ try {
         !document.getElementById("actionsBar").classList.contains("hidden"));
 
     // =========================================================
+    // EDITAR PRODUCTO (cambiar categoría y subcategoría)
+    // =========================================================
+    click("#editProduct");
+    await new Promise(r => setTimeout(r, 60));
+
+    ok("El modo editar avisa que estas editando",
+        !document.getElementById("modeBanner").classList.contains("hidden") &&
+        document.getElementById("modeBannerText").textContent.includes("editando"),
+        document.getElementById("modeBannerText").textContent);
+    ok("El boton Editar producto queda marcado",
+        document.getElementById("editProduct").classList.contains("active"));
+
+    // Al hacer clic en un producto se abre el formulario con sus datos
+    click(".productCard");
+    await waitForForm();
+
+    ok("El formulario de edicion se abre con el nombre del producto",
+        document.getElementById("newName").value.startsWith("Gaseosa"),
+        document.getElementById("newName").value);
+    ok("El formulario de edicion se abre con el precio del producto",
+        document.getElementById("nprice").value === "2500",
+        document.getElementById("nprice").value);
+    ok("El formulario de edicion se abre con el stock del producto",
+        document.getElementById("nstock").value === "9",
+        document.getElementById("nstock").value);
+    ok("El titulo del formulario dice que se esta editando",
+        document.getElementById("modalTitle").textContent.includes("Editar"),
+        document.getElementById("modalTitle").textContent);
+    ok("El boton dice Guardar cambios",
+        document.getElementById("inventaryConfirmBt").textContent.includes("Guardar"),
+        document.getElementById("inventaryConfirmBt").textContent);
+
+    // Se cambia la categoría a "Bebidas"
+    const opcionBebidas = [...document.querySelectorAll("#ncategory option")]
+        .find(o => o.textContent.trim() === "Bebidas");
+    document.getElementById("ncategory").value = opcionBebidas.value;
+    document.getElementById("ncategory").dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 60));
+
+    ok("Al elegir categoria se habilita el selector de subcategoria",
+        document.getElementById("nsubcategory").disabled === false);
+    ok("El selector de subcategoria ofrece las de esa categoria",
+        [...document.querySelectorAll("#nsubcategory option")]
+            .some(o => o.textContent.trim() === "Gaseosas"),
+        [...document.querySelectorAll("#nsubcategory option")].map(o => o.textContent.trim()).join(", "));
+
+    // Y se elige la subcategoria
+    const opcionGaseosas = [...document.querySelectorAll("#nsubcategory option")]
+        .find(o => o.textContent.trim() === "Gaseosas");
+    document.getElementById("nsubcategory").value = opcionGaseosas.value;
+
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    const trasEditar = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda");
+    const editado = trasEditar.products.find(p => p.name.startsWith("Gaseosa"));
+    const categoriaBebidas = trasEditar.categories.find(c => c.name === "Bebidas");
+    const subcategoriaGaseosas = categoriaBebidas.subcategories.find(s => s.name === "Gaseosas");
+
+    ok("El producto cambia de categoria", editado.category === categoriaBebidas.id,
+        `categoria = ${editado.category} | esperado = ${categoriaBebidas.id}`);
+    ok("El producto cambia de subcategoria", editado.subcategory === subcategoriaGaseosas.id,
+        `subcategoria = ${editado.subcategory} | esperado = ${subcategoriaGaseosas.id}`);
+    ok("Tras editar se sigue en modo edicion",
+        !document.getElementById("modeBanner").classList.contains("hidden") &&
+        document.getElementById("editProduct").classList.contains("active"));
+
+    // Editar de nuevo y cambiar el stock
+    await openEditor();
+    ok("La categoria queda puesta al reabrir el formulario",
+        document.getElementById("ncategory").value === categoriaBebidas.id,
+        document.getElementById("ncategory").value);
+    ok("La subcategoria queda puesta al reabrir el formulario",
+        document.getElementById("nsubcategory").value === subcategoriaGaseosas.id,
+        document.getElementById("nsubcategory").value);
+
+    document.getElementById("nstock").value = "25";
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    const trasStock = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda");
+    const conStock = trasStock.products.find(p => p.name.startsWith("Gaseosa"));
+
+    ok("El stock se actualiza al editar", conStock.quantity === 25,
+        `stock = ${conStock.quantity}`);
+    ok("El ajuste de stock queda registrado en el historial",
+        trasStock.stockHistory.some(m => m.action === "adjustment" && m.change === 16),
+        trasStock.stockHistory.map(m => `${m.action}:${m.change}`).join(", "));
+
+    // El stock con el que arranca la prueba de compras
+    const stockAntesDeCompra = conStock.quantity;
+
+    // Cancelar la edición no guarda nada
+    await openEditor();
+    document.getElementById("newName").value = "NO DEBE GUARDARSE";
+    click("#inventaryCancelBt");
+    await new Promise(r => setTimeout(r, 80));
+
+    const trasCancelar = JSON.parse(localStorage.getItem("menuStockUsers"))
+        .find(u => u.profile.name === "Mi Tienda");
+    ok("Cancelar la edicion no guarda los cambios",
+        trasCancelar.products.find(p => p.name.startsWith("Gaseosa")) !== undefined &&
+        trasCancelar.products.every(p => p.name !== "NO DEBE GUARDARSE"));
+
+    // =========================================================
+    // MOVER UN PRODUCTO DE CATEGORÍA
+    // La lista no puede quedar vacía sin explicación, y hay que
+    // poder ir a la categoría nueva.
+    // =========================================================
+    click("#categoriesBt");
+    await new Promise(r => setTimeout(r, 100));
+
+    // "Snacks" está vacía: la lista tiene que explicar por qué
+    const btnSnacks = [...document.querySelectorAll("[data-open-cat]")]
+        .find(b => b.textContent.trim() === "Snacks");
+    btnSnacks.click();
+    await new Promise(r => setTimeout(r, 100));
+
+    ok("Una categoria vacia explica que no hay productos",
+        document.querySelector(".productListEmpty") !== null &&
+        document.querySelector(".productListEmpty").textContent.includes("todavía no tiene productos"),
+        document.querySelector(".productListEmpty")
+            ? document.querySelector(".productListEmpty").textContent.trim()
+            : "sin estado vacio");
+
+    // Se entra a "Bebidas", donde está el producto que se editó antes
+    const btnBebidas = [...document.querySelectorAll("[data-open-cat]")]
+        .find(b => b.textContent.trim() === "Bebidas");
+    btnBebidas.click();
+    await new Promise(r => setTimeout(r, 100));
+
+    ok("La categoria muestra el producto que se le asigno",
+        document.querySelectorAll(".productCard").length === 2,
+        `${document.querySelectorAll(".productCard").length} tarjetas`);
+
+    // Se mueve ese producto a "Snacks", desde dentro de la categoría
+    await openEditor();
+
+    const opcionSnacksDestino = [...document.querySelectorAll("#ncategory option")]
+        .find(o => o.textContent.trim() === "Snacks");
+    document.getElementById("ncategory").value = opcionSnacksDestino.value;
+    document.getElementById("ncategory").dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 60));
+
+    click("#inventaryConfirmBt");
+    await waitFor(dialogOpen);
+
+    ok("Al mover el producto de categoria se avisa a donde fue",
+        document.getElementById("dialogBody").textContent.includes("Snacks"),
+        document.getElementById("dialogBody").textContent.trim().slice(0, 140));
+    ok("El aviso ofrece ir a la nueva categoria",
+        [...document.querySelectorAll("#dialogActions button")].some(b => b.textContent.includes("Snacks")),
+        [...document.querySelectorAll("#dialogActions button")].map(b => b.textContent.trim()).join(" | "));
+
+    const botonVer = [...document.querySelectorAll("#dialogActions button")]
+        .find(b => b.textContent.includes("Snacks"));
+    botonVer.click();
+    await new Promise(r => setTimeout(r, 250));
+
+    ok("Al ir a la nueva categoria se ve el producto movido",
+        document.querySelectorAll(".productCard").length === 1 &&
+        document.querySelector(".productCard h3").textContent.startsWith("Gaseosa"),
+        `${document.querySelectorAll(".productCard").length} tarjetas`);
+
+    // Y al sacarlo de nuevo, la categoría vuelve a quedarse vacía
+    await openEditor();
+
+    const opcionBebidasVuelta = [...document.querySelectorAll("#ncategory option")]
+        .find(o => o.textContent.trim() === "Bebidas");
+    document.getElementById("ncategory").value = opcionBebidasVuelta.value;
+    document.getElementById("ncategory").dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 60));
+
+    click("#inventaryConfirmBt");
+    await waitFor(dialogOpen);
+    await acceptDialog();
+
+    ok("Al sacar el producto la categoria vuelve a estar vacia y lo explica",
+        document.querySelector(".productListEmpty") !== null,
+        document.querySelector(".productListEmpty")
+            ? document.querySelector(".productListEmpty").textContent.trim()
+            : "sin estado vacio");
+
+    // =========================================================
+    // LA BÚSQUEDA ACTIVA NO SE PIERDE AL GUARDAR
+    // =========================================================
+    click("#productsBt");
+    await new Promise(r => setTimeout(r, 100));
+
+    // Se vuelve al modo de busqueda por nombre
+    const modoBusqueda = document.getElementById("searchBy");
+    modoBusqueda.value = "name";
+    modoBusqueda.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 100));
+
+    setValue("#invSearch", "Pepsi");
+    await new Promise(r => setTimeout(r, 100));
+    ok("La busqueda filtra la lista",
+        document.querySelectorAll(".productCard").length === 1,
+        `${document.querySelectorAll(".productCard").length} tarjetas`);
+
+    click("#addProduct");
+    await waitFor(() => document.getElementById("newName") !== null);
+    setValue("#newName", "Pepsi Light");
+    setValue("#nprice", "1900");
+    click("#inventaryConfirmBt");
+    await acceptDialog();
+
+    ok("La busqueda sigue puesta despues de guardar",
+        document.getElementById("invSearch").value === "Pepsi",
+        document.getElementById("invSearch").value);
+    ok("El producto nuevo aparece en la lista filtrada",
+        document.querySelectorAll(".productCard").length === 2,
+        `${document.querySelectorAll(".productCard").length} tarjetas`);
+
+    // Se limpia la búsqueda para las pruebas siguientes
+    setValue("#invSearch", "");
+    await new Promise(r => setTimeout(r, 100));
+
+    // =========================================================
     // MODULO DE COMPRAS A PROVEEDORES
     // =========================================================
     click("#purchasesBt");
@@ -455,8 +708,8 @@ try {
     const gaseosaTrasCompra = trasCompra.products.find(p => p.name.startsWith("Gaseosa"));
 
     ok("La compra suma el stock al producto",
-        gaseosaTrasCompra.quantity === 33,
-        `Gaseosa: ${gaseosaTrasCompra.quantity} (9 + 24)`);
+        gaseosaTrasCompra.quantity === stockAntesDeCompra + 24,
+        `Gaseosa: ${gaseosaTrasCompra.quantity} (${stockAntesDeCompra} + 24)`);
     ok("La compra queda guardada en el perfil",
         Array.isArray(trasCompra.purchases) && trasCompra.purchases.length === 1);
     ok("La compra guarda los items y el total",
@@ -486,8 +739,8 @@ try {
     const gaseosaTrasAnular = trasAnular.products.find(p => p.name.startsWith("Gaseosa"));
 
     ok("Anular la compra devuelve el stock",
-        gaseosaTrasAnular.quantity === 9,
-        `Gaseosa: ${gaseosaTrasAnular.quantity} (vuelve a 9)`);
+        gaseosaTrasAnular.quantity === stockAntesDeCompra,
+        `Gaseosa: ${gaseosaTrasAnular.quantity} (vuelve a ${stockAntesDeCompra})`);
     ok("La compra anulada queda marcada",
         trasAnular.purchases[0].anulada === true);
     ok("La anulacion queda en el historial de stock",

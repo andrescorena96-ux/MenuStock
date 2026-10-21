@@ -27,7 +27,10 @@ const categoriesBt = document.getElementById("categoriesBt");
 const newCategoryBt = document.getElementById("newCategoryBt");
 const historyBt = document.getElementById("historyBt");
 
-// Aviso de modo (cambiar precio / eliminar producto)
+// Boton de editar producto
+const editProductBt = document.getElementById("editProduct");
+
+// Aviso de modo (editar / cambiar precio / eliminar producto)
 const modeBanner = document.getElementById("modeBanner");
 const modeBannerIcon = document.getElementById("modeBannerIcon");
 const modeBannerText = document.getElementById("modeBannerText");
@@ -196,6 +199,7 @@ function openDialog({ title = "", bodyHtml = "", actions = [], onOpen = null, wi
         button.type = "button";
         button.className = action.variant === "danger" ? "confirmBt danger"
             : action.variant === "cancel" ? "cancelBt"
+            : action.variant === "ghost" ? "ghostBt"
             : "confirmBt";
         button.textContent = action.label;
 
@@ -223,13 +227,25 @@ function formatDialogMessage(message) {
 }
 
 // Aviso simple. Acepta \n para separar párrafos.
-function showAlert({ title = "Aviso", message = "" } = {}) {
+// extraActions permite ofrecer botones aparte del de "Entendido".
+function showAlert({ title = "Aviso", message = "", extraActions = [] } = {}) {
     return new Promise(resolve => {
         dialogResolve = resolve;
         openDialog({
             title,
             bodyHtml: `<p>${formatDialogMessage(message)}</p>`,
-            actions: [{ label: "Entendido", value: true }]
+            actions: [
+                ...extraActions.map(action => ({
+                    label: action.label,
+                    variant: "ghost",
+                    value: action.value,
+                    onClick: async (body) => {
+                        if (action.onClick) await action.onClick(body);
+                        return action.value;
+                    }
+                })),
+                { label: "Entendido", value: true }
+            ]
         });
     });
 }
@@ -399,6 +415,9 @@ let pendingClothingConfig = null;
 // Perfil que está esperando su contraseña en el password gate.
 let pendingLoginUserId = null;
 
+// Producto que se está editando en el formulario. null = alta nueva.
+let editingProduct = null;
+
 function storeTypeInfo(storeTypeId) {
     return STORE_TYPES.find(type => type.id === storeTypeId) || STORE_TYPES[STORE_TYPES.length - 1];
 }
@@ -418,6 +437,11 @@ const PACK_OPTIONS = [
 // Modos de la barra de acciones: el producto queda a la espera de
 // que el usuario elija cuáles quiere modificar o borrar.
 const ACTION_MODES = {
+    editProduct: {
+        icon: "✏️",
+        text: "Estás editando productos. Haz clic en el producto que quieras modificar.",
+        danger: false
+    },
     changePrice: {
         icon: "🏷️",
         text: "Estás cambiando precios. Haz clic en los productos que quieras modificar.",
@@ -1165,8 +1189,33 @@ function countProductsIn(categoryId, subcategoryId = null) {
 
 // Redibuja la lista respetando la categoría actual
 function refreshProducts() {
-    display(getVisibleProducts());
+    // Se respeta la búsqueda activa. Antes se llamaba display() directo
+    // y al guardar un producto se perdía el filtro que el usuario tenía
+    // puesto, aunque el texto siguiera en el buscador.
+    filterAn();
     highlightSelected();
+}
+
+// ¿El producto se está viendo ahora mismo en la pantalla?
+function productIsRendered(product) {
+    return [...allProducts.querySelectorAll(".productCard")]
+        .some(card => card.dataset.id === String(product.id));
+}
+
+// Explica por qué la lista está vacía, según el contexto.
+function emptyListMessage() {
+    const texto = searchInp.value.trim();
+
+    if (texto !== "") {
+        return `Ningún producto coincide con «${texto}».`;
+    }
+    if (currentCategoryId === "uncategorized") {
+        return "No hay productos sin categoría.";
+    }
+    if (currentCategoryId !== null) {
+        return `«${categoryName(currentCategoryId)}» todavía no tiene productos.`;
+    }
+    return "Todavía no hay productos registrados. Usa «Agregar producto» para empezar.";
 }
 
 
@@ -1178,7 +1227,7 @@ function refreshProducts() {
    ============================================================ */
 
 function isActionMode() {
-    return act === "changePrice" || act === "delete";
+    return act === "editProduct" || act === "changePrice" || act === "delete";
 }
 
 // Pinta el aviso de modo y marca el botón activo
@@ -1187,6 +1236,7 @@ function updateActionMode() {
 
     if (!info) {
         modeBanner.classList.add("hidden");
+        editProductBt.classList.remove("active");
         changePrice.classList.remove("active");
         delProduct.classList.remove("active");
         allProducts.classList.remove("modeDelete");
@@ -1198,6 +1248,7 @@ function updateActionMode() {
     modeBannerIcon.textContent = info.icon;
     modeBannerText.textContent = info.text;
 
+    editProductBt.classList.toggle("active", act === "editProduct");
     changePrice.classList.toggle("active", act === "changePrice");
     delProduct.classList.toggle("active", act === "delete");
     allProducts.classList.toggle("modeDelete", act === "delete");
@@ -1219,6 +1270,14 @@ function resetActionMode() {
     if (isActionMode()) {
         cancelCurrentAction();
     }
+}
+
+// Abrir el formulario de edición de un producto, con todos sus
+// datos ya puestos (incluidos categoría y subcategoría).
+function openProductEditor(product) {
+    editingProduct = product;
+    act = "editProduct";
+    myInventaryActions('addProduct');
 }
 
 // La barra inferior solo se ve en la vista de productos.
@@ -1800,6 +1859,17 @@ async function importProfileData(file) {
 
 function display(prods) {
     allProducts.innerHTML = "";
+
+    if (prods.length === 0) {
+        allProducts.innerHTML = `
+            <li class="productListEmpty">
+                <span class="productListEmptyIcon" aria-hidden="true">📦</span>
+                <p>${escapeHtml(emptyListMessage())}</p>
+            </li>
+        `;
+        return;
+    }
+
     for (let prod of prods) {
         const li = document.createElement("li");
         li.classList.add("productCard");
@@ -1957,6 +2027,150 @@ function closeModal() {
 
 
 /* ============================================================
+   9b. LEER EL FORMULARIO DE PRODUCTO
+   Sirve igual para el alta y para la edición: devuelve los datos
+   del formulario, o un error si falta algo.
+   ============================================================ */
+
+function readProductForm() {
+    const newName = document.getElementById("newName");
+    const newPrice = document.getElementById("nprice");
+    const newImg = document.getElementById("nimg");
+    const newStock = document.getElementById("nstock");
+    const newCategory = document.getElementById("ncategory");
+    const newSubcategory = document.getElementById("nsubcategory");
+
+    const name = newName.value.trim();
+    const price = newPrice.valueAsNumber;
+
+    if (name === "" || !Number.isFinite(price) || price < 0) {
+        return { error: "El nombre y el precio son obligatorios." };
+    }
+
+    const category = newCategory && newCategory.value ? newCategory.value : null;
+    const subcategory = category && newSubcategory && newSubcategory.value
+        ? newSubcategory.value
+        : null;
+
+    // ------------------------------------------------------
+    // TIENDA DE ROPA: leer tallas/colores si el producto los usa
+    // ------------------------------------------------------
+    const isClothing = currentUser && currentUser.storeType === "clothing";
+    let variants = null;
+    let variantMode = null;
+
+    if (isClothing) {
+        const variantGrid = document.getElementById("variantModeGrid");
+        const selectedBtn = variantGrid ? variantGrid.querySelector(".storeTypeOption.selected") : null;
+        variantMode = selectedBtn ? selectedBtn.dataset.variantMode : "unique";
+
+        if (variantMode === "sameAll") {
+            const checked = [...document.querySelectorAll("#variantDetails .sizeCheck:checked")].map(c => c.value);
+            const qtyInput = document.getElementById("sameAllQty");
+            const qty = qtyInput ? qtyInput.valueAsNumber : NaN;
+
+            if (checked.length === 0 || Number.isNaN(qty) || qty < 0) {
+                return { error: "Elige al menos una talla y una cantidad válida." };
+            }
+
+            variants = checked.map(size => ({ size, color: null, quantity: qty }));
+
+        } else if (variantMode === "perSize") {
+            const rows = document.querySelectorAll("#perSizeQtyRows .sizeQtyRow");
+
+            if (rows.length === 0) {
+                return { error: "Elige al menos una talla." };
+            }
+
+            variants = [];
+            for (const row of rows) {
+                const size = row.dataset.size;
+                const qty = row.querySelector(".perSizeQty").valueAsNumber;
+
+                if (Number.isNaN(qty) || qty < 0) {
+                    return { error: `Ingresa una cantidad válida para la talla ${size}.` };
+                }
+                variants.push({ size, color: null, quantity: qty });
+            }
+
+        } else if (variantMode === "colorSize") {
+            const blocks = document.querySelectorAll("#colorBlocks .colorBlock");
+
+            if (blocks.length === 0) {
+                return { error: "Agrega al menos un color." };
+            }
+
+            variants = [];
+            for (const block of blocks) {
+                const colorName = block.querySelector(".colorNameInput").value.trim();
+
+                if (!colorName) {
+                    return { error: "Ponle nombre a cada color." };
+                }
+
+                const rows = block.querySelectorAll(".sizeQtyRow");
+                if (rows.length === 0) {
+                    return { error: `Elige al menos una talla para el color "${colorName}".` };
+                }
+
+                for (const row of rows) {
+                    const size = row.dataset.size;
+                    const qty = row.querySelector(".perSizeQty").valueAsNumber;
+
+                    if (Number.isNaN(qty) || qty < 0) {
+                        return { error: `Ingresa una cantidad válida para ${colorName} / ${size}.` };
+                    }
+                    variants.push({ size, color: colorName, quantity: qty });
+                }
+            }
+        }
+        // variantMode === "unique" -> variants queda null, se usa el stock normal
+    }
+
+    let stock = newStock.valueAsNumber;
+    if (variants) {
+        stock = variants.reduce((sum, v) => sum + v.quantity, 0);
+    } else if (newStock.value.trim() === "" || Number.isNaN(stock)) {
+        stock = 0;
+    }
+
+    const imageRaw = newImg.value.trim();
+    const image = imageRaw ? (safeImageUrl(imageRaw) || PLACEHOLDER_IMAGE) : PLACEHOLDER_IMAGE;
+
+    const clothing = { season: "", collection: "", series: "", supplier: "" };
+
+    if (isClothing) {
+        const season = document.getElementById("nseason");
+        const collection = document.getElementById("ncollection");
+        const series = document.getElementById("nseries");
+        const supplier = document.getElementById("nsupplier");
+
+        clothing.season = season ? season.value.trim() : "";
+        clothing.collection = collection ? collection.value.trim() : "";
+        clothing.series = series ? series.value.trim() : "";
+        clothing.supplier = supplier ? supplier.value.trim() : "";
+    }
+
+    return {
+        name, price, stock, image, category, subcategory,
+        variants, variantMode, isClothing, clothing
+    };
+}
+
+// Deduce el modo de variante de un producto guardado antes de que
+// existiera el campo variantMode.
+function inferVariantMode(product) {
+    if (!product || !Array.isArray(product.variants) || product.variants.length === 0) {
+        return "unique";
+    }
+    if (product.variants.some(v => v.color)) return "colorSize";
+
+    const cantidades = new Set(product.variants.map(v => v.quantity));
+    return cantidades.size === 1 ? "sameAll" : "perSize";
+}
+
+
+/* ============================================================
    10. CONFIRM / CANCEL ACTIONS
    ============================================================ */
 
@@ -2029,143 +2243,139 @@ async function confirmButton() {
         }
 
         // =========================
-        // ADD PRODUCT
+        // AGREGAR / EDITAR PRODUCTO
         // =========================
-        case "addProduct": {
-            const newName = document.getElementById("newName");
-            const newPrice = document.getElementById("nprice");
-            const newImg = document.getElementById("nimg");
-            const newStock = document.getElementById("nstock");
-            const newCategory = document.getElementById("ncategory");
-            const newSubcategory = document.getElementById("nsubcategory");
+        case "addProduct":
+        case "editProduct": {
+            const data = readProductForm();
 
-            let myIm = newImg.value;
-            let myStock = newStock.valueAsNumber;
-
-            if (newName.value.trim() === "" || newPrice.value.trim() === "") {
-                await showAlert({ title: "Faltan datos", message: "El nombre y el precio son obligatorios." });
+            if (data.error) {
+                await showAlert({ title: "Faltan datos", message: data.error });
                 return;
             }
 
-            // ------------------------------------------------------
-            // TIENDA DE ROPA: leer tallas/colores si el producto los usa
-            // ------------------------------------------------------
-            const isClothing = currentUser && currentUser.storeType === "clothing";
-            let variants = null;
+            // ----------------------------------------
+            // EDITAR UN PRODUCTO EXISTENTE
+            // ----------------------------------------
+            if (act === "editProduct") {
+                const product = products.find(p => String(p.id) === String(editingProduct.id));
 
-            if (isClothing) {
-                const variantGrid = document.getElementById("variantModeGrid");
-                const selectedBtn = variantGrid ? variantGrid.querySelector(".storeTypeOption.selected") : null;
-                const mode = selectedBtn ? selectedBtn.dataset.variantMode : "unique";
+                if (!product) {
+                    await showAlert({
+                        title: "Producto no encontrado",
+                        message: "El producto que querías editar ya no existe."
+                    });
+                    editingProduct = null;
+                    closeModal();
+                    return;
+                }
 
-                if (mode === "sameAll") {
-                    const checked = [...document.querySelectorAll("#variantDetails .sizeCheck:checked")].map(c => c.value);
-                    const qtyInput = document.getElementById("sameAllQty");
-                    const qty = qtyInput ? qtyInput.valueAsNumber : NaN;
+                const cambios = [];
 
-                    if (checked.length === 0 || Number.isNaN(qty) || qty < 0) {
-                        await showAlert({ title: "Faltan datos", message: "Elige al menos una talla y una cantidad válida." });
-                        return;
-                    }
+                if (product.name !== data.name) {
+                    cambios.push("nombre");
+                    product.name = data.name;
+                }
 
-                    variants = checked.map(size => ({ size, color: null, quantity: qty }));
+                if (Number(product.price) !== Number(data.price)) {
+                    cambios.push("precio");
+                    product.price = data.price;
+                }
 
-                } else if (mode === "perSize") {
-                    const rows = document.querySelectorAll("#perSizeQtyRows .sizeQtyRow");
+                const imagenAntes = (product.image || "").trim();
+                if (imagenAntes !== data.image) {
+                    // Poner la imagen de relleno no es un cambio real.
+                    const esSoloRelleno = imagenAntes === "" && data.image === PLACEHOLDER_IMAGE;
+                    if (!esSoloRelleno) cambios.push("imagen");
+                    product.image = data.image;
+                }
 
-                    if (rows.length === 0) {
-                        await showAlert({ title: "Faltan tallas", message: "Elige al menos una talla." });
-                        return;
-                    }
+                // Aquí es donde el producto cambia de categoría y subcategoría.
+                if ((product.category || null) !== (data.category || null)) {
+                    cambios.push("categoría");
+                }
+                if ((product.subcategory || null) !== (data.subcategory || null)) {
+                    cambios.push("subcategoría");
+                }
 
-                    variants = [];
-                    for (const row of rows) {
-                        const size = row.dataset.size;
-                        const qty = row.querySelector(".perSizeQty").valueAsNumber;
+                product.category = data.category;
+                product.subcategory = data.subcategory;
 
-                        if (Number.isNaN(qty) || qty < 0) {
-                            await showAlert({ title: "Cantidad inválida", message: `Ingresa una cantidad válida para la talla ${size}.` });
-                            return;
-                        }
-                        variants.push({ size, color: null, quantity: qty });
-                    }
+                if (data.isClothing) {
+                    product.variants = data.variants;
+                    product.variantMode = data.variantMode;
+                    product.season = data.clothing.season;
+                    product.collection = data.clothing.collection;
+                    product.series = data.clothing.series;
+                    product.supplier = data.clothing.supplier;
+                }
 
-                } else if (mode === "colorSize") {
-                    const blocks = document.querySelectorAll("#colorBlocks .colorBlock");
+                // Si se movió el stock, queda como ajuste en el historial:
+                // ningún cambio de inventario pasa sin rastro.
+                const delta = data.stock - product.quantity;
+                product.quantity = data.stock;
 
-                    if (blocks.length === 0) {
-                        await showAlert({ title: "Faltan colores", message: "Agrega al menos un color." });
-                        return;
-                    }
+                if (delta !== 0) {
+                    cambios.push("stock");
+                    recordStockChange(product, "adjustment", delta, "Ajuste al editar el producto");
+                }
 
-                    variants = [];
-                    for (const block of blocks) {
-                        const colorName = block.querySelector(".colorNameInput").value.trim();
+                refreshProducts();
 
-                        if (!colorName) {
-                            await showAlert({ title: "Color sin nombre", message: "Ponle nombre a cada color." });
-                            return;
-                        }
+                // Se sigue en modo edición para poder corregir varios seguidos.
+                closeModal();
+                act = "editProduct";
+                editingProduct = null;
 
-                        const rows = block.querySelectorAll(".sizeQtyRow");
-                        if (rows.length === 0) {
-                            await showAlert({ title: "Faltan tallas", message: `Elige al menos una talla para el color "${colorName}".` });
-                            return;
-                        }
+                messageAfterSave = {
+                    title: "Producto actualizado",
+                    message: cambios.length > 0
+                        ? `Se actualizó "${data.name}". Cambios: ${cambios.join(", ")}.`
+                        : `No hubo cambios en "${data.name}".`
+                };
 
-                        for (const row of rows) {
-                            const size = row.dataset.size;
-                            const qty = row.querySelector(".perSizeQty").valueAsNumber;
-
-                            if (Number.isNaN(qty) || qty < 0) {
-                                await showAlert({ title: "Cantidad inválida", message: `Ingresa una cantidad válida para ${colorName} / ${size}.` });
-                                return;
-                            }
-                            variants.push({ size, color: colorName, quantity: qty });
-                        }
+                // Si el producto se movió de categoría, deja de verse en la
+                // vista actual. Sin avisar, el usuario cree que se borró.
+                if (!productIsRendered(product)) {
+                    if (product.category) {
+                        const nombreCat = categoryName(product.category);
+                        messageAfterSave.message += `\n\nAhora está en «${nombreCat}», que no se ve desde aquí.`;
+                        messageAfterSave.extraActions = [{
+                            label: `Ver en «${nombreCat}»`,
+                            value: "goto"
+                        }];
+                        messageAfterSave.goto = () => openCategory(product.category, product.subcategory);
+                    } else {
+                        messageAfterSave.message += "\n\nAhora no tiene categoría.";
                     }
                 }
-                // mode === "unique" → variants queda null, se usa el stock normal
+                break;
             }
 
-            if (variants) {
-                myStock = variants.reduce((sum, v) => sum + v.quantity, 0);
-            } else if (newStock.value.trim() === "" || Number.isNaN(myStock)) {
-                myStock = 0;
-            }
-
-            if (newImg.value.trim() === "") {
-                myIm = "https://i0.wp.com/tinasbotanicals.com/wp-content/uploads/2025/01/No-Product-Image-Available.png?fit=800%2C800&ssl=1";
-            }
-
-            const newId = `${newName.value[0].toLowerCase()}-${Date.now()}`;
-
-            const chosenCategory = newCategory && newCategory.value ? newCategory.value : null;
-            const chosenSubcategory = newSubcategory && newSubcategory.value ? newSubcategory.value : null;
+            // ----------------------------------------
+            // DAR DE ALTA UN PRODUCTO NUEVO
+            // ----------------------------------------
+            const newId = `${data.name[0].toLowerCase()}-${Date.now()}`;
 
             const createdProduct = {
                 id: newId,
-                name: newName.value,
-                price: newPrice.valueAsNumber,
-                quantity: myStock,
-                image: myIm,
-                category: chosenCategory,
-                subcategory: chosenCategory ? chosenSubcategory : null,
+                name: data.name,
+                price: data.price,
+                quantity: data.stock,
+                image: data.image,
+                category: data.category,
+                subcategory: data.subcategory,
                 createdIn: new Date()
             };
 
-            if (isClothing) {
-                createdProduct.variants = variants; // null si el producto es "Artículo único"
+            if (data.isClothing) {
+                createdProduct.variants = data.variants;   // null si es "Artículo único"
+                createdProduct.variantMode = data.variantMode;
 
-                const season = document.getElementById("nseason");
-                const collection = document.getElementById("ncollection");
-                const series = document.getElementById("nseries");
-                const supplier = document.getElementById("nsupplier");
-
-                createdProduct.season = season ? season.value.trim() : "";
-                createdProduct.collection = collection ? collection.value.trim() : "";
-                createdProduct.series = series ? series.value.trim() : "";
-                createdProduct.supplier = supplier ? supplier.value.trim() : "";
+                createdProduct.season = data.clothing.season;
+                createdProduct.collection = data.clothing.collection;
+                createdProduct.series = data.clothing.series;
+                createdProduct.supplier = data.clothing.supplier;
             }
 
             products.push(createdProduct);
@@ -2174,13 +2384,26 @@ async function confirmButton() {
             recordStockChange(
                 createdProduct,
                 "created",
-                myStock,
-                variants ? "Tallas/colores iniciales" : "Stock inicial"
+                data.stock,
+                data.variants ? "Tallas/colores iniciales" : "Stock inicial"
             );
 
             refreshProducts();
             closeModal();
             act = "bill";
+            editingProduct = null;
+
+            messageAfterSave = {
+                title: "Producto agregado",
+                message: `Se agregó "${data.name}" al inventario.`
+            };
+
+            // Si hay una búsqueda puesta y el producto nuevo no entra en
+            // ella, se avisa: si no, parece que no se guardó nada.
+            if (!productIsRendered(createdProduct) && searchInp.value.trim() !== "") {
+                messageAfterSave.message +=
+                    `\n\nNo se ve porque la búsqueda «${searchInp.value.trim()}» lo está filtrando.`;
+            }
             break;
         }
 
@@ -2502,7 +2725,12 @@ async function confirmButton() {
     syncActionsBar();
 
     if (messageAfterSave) {
-        await showAlert(messageAfterSave);
+        const resultado = await showAlert(messageAfterSave);
+
+        // Botones extra del aviso (por ejemplo "Ver en «categoría»").
+        if (resultado === "goto" && typeof messageAfterSave.goto === "function") {
+            messageAfterSave.goto();
+        }
     }
 }
 
@@ -2522,9 +2750,9 @@ function cancelCurrentAction() {
             closeModal();
             break;
         }
-        case 'addProduct': {
-            const newImg = document.getElementById("nimg");
-            if (newImg) newImg.value = "";
+        case 'addProduct':
+        case 'editProduct': {
+            editingProduct = null;
             closeModal();
             break;
         }
@@ -2674,9 +2902,21 @@ function myInventaryActions(action) {
         }
 
         case 'addProduct': {
-            // Si estamos dentro de una categoría, el producto nace ahí
-            const presetCategory = currentCategoryId === "uncategorized" ? null : currentCategoryId;
-            const presetSubcategory = presetCategory ? currentSubcategoryId : null;
+            const isEditing = !!editingProduct;
+
+            // El formulario sirve para alta y para edición: la accion
+            // depende de si hay un producto cargado.
+            act = isEditing ? "editProduct" : "addProduct";
+
+            // Si estamos dentro de una categoría, el producto nace ahí.
+            // Al editar, manda la categoría que ya tiene el producto.
+            const presetCategory = isEditing
+                ? (editingProduct.category || null)
+                : (currentCategoryId === "uncategorized" ? null : currentCategoryId);
+
+            const presetSubcategory = isEditing
+                ? (editingProduct.subcategory || null)
+                : (presetCategory ? currentSubcategoryId : null);
 
             const categoryOptions = [`<option value="">Sin categoría</option>`]
                 .concat(categories.map(cat => `
@@ -2716,18 +2956,23 @@ function myInventaryActions(action) {
                 <div class="productFormModal">
 
                     <div class="productFormHeader">
-                        <h3 id="modalTitle">¡Agrega un nuevo producto!</h3>
+                        <h3 id="modalTitle">${isEditing ? "Editar producto" : "¡Agrega un nuevo producto!"}</h3>
                         <p class="productFormSubtitle">
-                            El nombre y el precio son obligatorios. El resto de los campos
-                            se puede completar más adelante.
+                            ${isEditing
+                                ? "Cambia lo que necesites. Si mueves el stock, queda registrado en el historial como ajuste."
+                                : "El nombre y el precio son obligatorios. El resto de los campos se puede completar más adelante."}
                         </p>
                     </div>
 
                     <div class="productFormGrid">
-                        <input id="newName" type="text" placeholder="Nombra tu producto">
-                        <input id="nprice" type="number" placeholder="Ingresa precio">
-                        <input id="nimg" type="url" placeholder="Imagen URL">
-                        <input id="nstock" type="number" placeholder="Stock inicial">
+                        <input id="newName" type="text" placeholder="Nombra tu producto"
+                               value="${isEditing ? escapeHtml(editingProduct.name) : ""}">
+                        <input id="nprice" type="number" placeholder="Ingresa precio"
+                               value="${isEditing ? escapeHtml(editingProduct.price) : ""}">
+                        <input id="nimg" type="url" placeholder="Imagen URL"
+                               value="${isEditing ? escapeHtml(editingProduct.image || "") : ""}">
+                        <input id="nstock" type="number" placeholder="Stock inicial"
+                               value="${isEditing ? escapeHtml(editingProduct.quantity) : ""}">
                         <select id="ncategory">${categoryOptions}</select>
                         <select id="nsubcategory"></select>
                     </div>
@@ -2736,7 +2981,9 @@ function myInventaryActions(action) {
 
                     <div class="buttons">
                         <button id="inventaryCancelBt" class="cancelBt" type="button">Cancelar</button>
-                        <button id="inventaryConfirmBt" class="confirmBt" type="button">Aceptar</button>
+                        <button id="inventaryConfirmBt" class="confirmBt" type="button">
+                            ${isEditing ? "Guardar cambios" : "Aceptar"}
+                        </button>
                     </div>
 
                 </div>
@@ -2779,47 +3026,74 @@ function myInventaryActions(action) {
                 const variantDetails = document.getElementById("variantDetails");
                 const stockInput = document.getElementById("nstock");
 
-                let selectedVariantMode = "unique";
+                // Al editar se recuperan las variantes que ya tiene el
+                // producto, para no tener que volver a escribirlas.
+                const editingVariants = (isEditing && Array.isArray(editingProduct.variants))
+                    ? editingProduct.variants
+                    : null;
 
-                function sizeCheckboxesHtml() {
+                let selectedVariantMode = isEditing
+                    ? (editingProduct.variantMode || inferVariantMode(editingProduct))
+                    : "unique";
+
+                function sizeCheckboxesHtml(checkedSizes = []) {
+                    const marcadas = new Set(checkedSizes);
                     return sizeList.map(size => `
                         <label class="sizeCheckboxOption">
-                            <input type="checkbox" class="sizeCheck" value="${escapeHtml(size)}"> ${escapeHtml(size)}
+                            <input type="checkbox" class="sizeCheck" value="${escapeHtml(size)}"
+                                   ${marcadas.has(size) ? "checked" : ""}> ${escapeHtml(size)}
                         </label>
                     `).join("");
                 }
 
-                function qtyRowsHtml(sizes) {
+                function qtyRowsHtml(sizes, cantidades = {}) {
                     return sizes.map(size => `
                         <div class="sizeQtyRow" data-size="${escapeHtml(size)}">
                             <span>${escapeHtml(size)}</span>
-                            <input type="number" min="0" class="perSizeQty" placeholder="Cantidad">
+                            <input type="number" min="0" class="perSizeQty" placeholder="Cantidad"
+                                   value="${escapeHtml(cantidades[size] ?? "")}">
                         </div>
                     `).join("");
                 }
 
                 function renderPerSizeRows(scopeEl, rowsContainer) {
                     const checked = [...scopeEl.querySelectorAll(".sizeCheck:checked")].map(c => c.value);
-                    rowsContainer.innerHTML = qtyRowsHtml(checked);
+
+                    // Se conservan las cantidades ya escritas: antes de
+                    // redibujar se leen los valores actuales.
+                    const cantidades = {};
+                    rowsContainer.querySelectorAll(".sizeQtyRow").forEach(row => {
+                        const input = row.querySelector(".perSizeQty");
+                        if (input && input.value !== "") cantidades[row.dataset.size] = input.value;
+                    });
+
+                    rowsContainer.innerHTML = qtyRowsHtml(checked, cantidades);
                 }
 
-                function addColorBlock() {
+                function addColorBlock(colorData = null) {
                     const container = document.getElementById("colorBlocks");
                     if (!container) return;
+
+                    const colorName = colorData ? colorData.name : "";
+                    const colorSizes = colorData ? colorData.sizes : [];
+                    const colorCantidades = colorData ? colorData.cantidades : {};
 
                     const block = document.createElement("div");
                     block.className = "colorBlock";
                     block.innerHTML = `
                         <div class="productInputs">
-                            <input type="text" class="colorNameInput" placeholder="Nombre del color (ej. Negro)">
+                            <input type="text" class="colorNameInput" placeholder="Nombre del color (ej. Negro)"
+                                   value="${escapeHtml(colorName)}">
                             <button class="cancelBt removeColorBt" type="button">Eliminar</button>
                         </div>
-                        <div class="sizeCheckboxGrid">${sizeCheckboxesHtml()}</div>
+                        <div class="sizeCheckboxGrid">${sizeCheckboxesHtml(colorSizes)}</div>
                         <div class="sizeQtyRows colorQtyRows"></div>
                     `;
                     container.appendChild(block);
 
                     const rows = block.querySelector(".colorQtyRows");
+                    rows.innerHTML = qtyRowsHtml(colorSizes, colorCantidades);
+
                     block.querySelectorAll(".sizeCheck").forEach(chk => {
                         chk.addEventListener("change", () => renderPerSizeRows(block, rows));
                     });
@@ -2847,17 +3121,32 @@ function myInventaryActions(action) {
                         return;
                     }
 
+                    const tallas = editingVariants ? editingVariants.map(v => v.size) : [];
+
                     if (selectedVariantMode === "sameAll") {
+                        const cantidad = (editingVariants && editingVariants.length > 0)
+                            ? editingVariants[0].quantity
+                            : "";
+
                         variantDetails.innerHTML = `
-                            <div class="sizeCheckboxGrid">${sizeCheckboxesHtml()}</div>
-                            <input id="sameAllQty" type="number" min="0" class="sizeQtyInput" placeholder="Cantidad por talla seleccionada">
+                            <div class="sizeCheckboxGrid">${sizeCheckboxesHtml(tallas)}</div>
+                            <input id="sameAllQty" type="number" min="0" class="sizeQtyInput"
+                                   placeholder="Cantidad por talla seleccionada"
+                                   value="${escapeHtml(cantidad)}">
                         `;
                     } else if (selectedVariantMode === "perSize") {
+                        const cantidades = {};
+                        if (editingVariants) {
+                            editingVariants.forEach(v => { cantidades[v.size] = v.quantity; });
+                        }
+
                         variantDetails.innerHTML = `
-                            <div class="sizeCheckboxGrid">${sizeCheckboxesHtml()}</div>
+                            <div class="sizeCheckboxGrid">${sizeCheckboxesHtml(tallas)}</div>
                             <div id="perSizeQtyRows" class="sizeQtyRows"></div>
                         `;
                         const rows = document.getElementById("perSizeQtyRows");
+                        rows.innerHTML = qtyRowsHtml(tallas, cantidades);
+
                         variantDetails.querySelectorAll(".sizeCheck").forEach(chk => {
                             chk.addEventListener("change", () => renderPerSizeRows(variantDetails, rows));
                         });
@@ -2866,8 +3155,24 @@ function myInventaryActions(action) {
                             <div id="colorBlocks" class="colorBlocks"></div>
                             <button id="addColorBt" class="cancelBt" type="button">+ Agregar color</button>
                         `;
-                        document.getElementById("addColorBt").addEventListener("click", addColorBlock);
-                        addColorBlock();
+                        document.getElementById("addColorBt").addEventListener("click", () => addColorBlock());
+
+                        if (editingVariants && editingVariants.length > 0) {
+                            // Se reconstruye un bloque por cada color.
+                            const porColor = new Map();
+                            for (const v of editingVariants) {
+                                const key = v.color || "";
+                                if (!porColor.has(key)) {
+                                    porColor.set(key, { name: key, sizes: [], cantidades: {} });
+                                }
+                                const entry = porColor.get(key);
+                                entry.sizes.push(v.size);
+                                entry.cantidades[v.size] = v.quantity;
+                            }
+                            porColor.forEach(entry => addColorBlock(entry));
+                        } else {
+                            addColorBlock();
+                        }
                     }
                 }
 
@@ -3252,6 +3557,13 @@ async function accumulateActions(action, event) {
 
     if (!product) {
         console.error("Producto no encontrado. ID de tarjeta:", card.dataset.id);
+        return;
+    }
+
+    // En modo editar no se abre el panel de la cuenta: se abre el
+    // formulario del producto con todos sus datos.
+    if (action === "editProduct") {
+        openProductEditor(product);
         return;
     }
 
@@ -3740,8 +4052,24 @@ addProduct.addEventListener("click", () => {
     // abrir el formulario de alta encima del panel de borrado.
     resetActionMode();
 
+    editingProduct = null;
     act = "addProduct";
     myInventaryActions('addProduct');
+});
+
+editProductBt.addEventListener("click", () => {
+    // Un segundo clic en el boton sale del modo.
+    if (act === "editProduct") {
+        resetActionMode();
+        return;
+    }
+
+    resetActionMode();
+
+    act = "editProduct";
+    editingProduct = null;
+    updateActionMode();
+    syncActionsBar();
 });
 
 historyBt.addEventListener("click", () => {
