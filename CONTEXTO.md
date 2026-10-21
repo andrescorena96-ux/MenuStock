@@ -306,6 +306,8 @@ Clic en las tarjetas → se arma la **cuenta** (panel inferior). Botón *Aceptar
 8. **Se podía vender más stock del disponible** y quedaba negativo.
 9. **Un `<header>` dentro de un formulario heredaba la cabecera oxblood** de la app.
 10. **Los botones ⋮ de las tarjetas se colgaban** al cambiar de vista.
+11. **Las tarjetas se recortaban en viewports bajos.** La app es una caja de altura fija (`#appRoot { height: 100dvh }`) con scroll interno; si el header + buscador + título se comían la pantalla, `.productList` colapsaba (medido: 11 px en un viewport de 360×640) y las tarjetas quedaban cortadas: solo se veían la imagen y la casilla. Solución: `min-height` en la lista y, con `@media (max-height: 720px)`, la app deja de ser de altura fija y hace scroll la página.
+12. **El botón ⋮ y la casilla eran invisibles sin hover.** Con `opacity: 0` nunca se descubrían en táctil. Ahora van en `opacity: 0.55` en reposo.
 
 ---
 

@@ -349,7 +349,11 @@ select.inp:focus {
     gap: 1.2rem;
 
     flex: 1;
-    min-height: 0;
+
+    /* Nunca se aplasta por debajo de una fila de tarjetas: si el
+       viewport es bajo, las tarjetas se recortaban y solo se veian
+       la imagen y la casilla. */
+    min-height: 330px;
 
     overflow-y: auto;
 
@@ -539,6 +543,18 @@ select.inp:focus {
 
     display: flex;
     justify-content: flex-end;
+
+    /* Sticky: cuando la pantalla es baja y la pagina hace scroll,
+       la barra sigue al alcance sin tapar el contenido. */
+    position: sticky;
+    bottom: 0;
+    z-index: 600;
+
+    padding: 0.5rem 0;
+
+    background: var(--paper);
+    border-top: 1px solid var(--beige-light);
+    box-shadow: 0 -6px 18px rgba(42, 27, 22, 0.07);
 }
 
 .actBtn {
@@ -607,7 +623,7 @@ select.inp:focus {
 
     cursor: pointer;
 
-    opacity: 0.3;
+    opacity: 0.55;
     transition: opacity var(--transition);
 }
 
@@ -639,7 +655,9 @@ select.inp:focus {
 
     cursor: pointer;
 
-    opacity: 0;
+    /* Semitransparente en reposo: en pantallas tactiles no hay hover
+       y con opacity 0 el boton no se discoverria nunca. */
+    opacity: 0.55;
     transition: opacity var(--transition), background var(--transition), color var(--transition);
 }
 
@@ -4604,5 +4622,46 @@ li:focus-visible {
     .recipeLine input {
         flex: 1 1 0;
         width: auto;
+    }
+}
+
+/* =========================================================
+   VIEWPORTS BAJOS
+   Con poca altura, la app deja de ser una caja de altura fija con
+   scroll interno: el contenido crece y hace scroll la pagina. Asi
+   ninguna tarjeta queda recortada (se veia solo la imagen y la
+   casilla) y la barra de acciones, que es sticky, sigue al alcance.
+   ========================================================= */
+
+@media (max-height: 720px) {
+
+    #appRoot {
+        height: auto;
+        min-height: 100dvh;
+    }
+
+    .main {
+        flex: none;
+        padding-bottom: 0;
+    }
+
+    .productList,
+    .categoriesView,
+    .purchasesView {
+        flex: none;
+        min-height: 0;
+        overflow: visible;
+    }
+
+    .categoryTree,
+    .purchaseList {
+        overflow: visible;
+        min-height: 0;
+    }
+
+    /* La barra se pega al pie de la pagina */
+    .actions {
+        margin-top: 1rem;
+        padding-bottom: 0.8rem;
     }
 }
